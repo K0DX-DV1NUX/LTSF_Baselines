@@ -8,6 +8,7 @@ import numpy as np
 parser = argparse.ArgumentParser(description='SparseTSF & other models for Time Series Forecasting')
 
 # basic config
+parser.add_argument('--seed', type=int, default=2023, help='random seed')
 parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
 parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
 parser.add_argument('--model', type=str, required=True, default='SparseTSF', help='model name')
@@ -91,10 +92,13 @@ parser.add_argument('--test_flop', action='store_true', default=False, help='See
 args = parser.parse_args()
 
 # random seed
-fix_seed_list = range(2023, 2033)
+fix_seed = args.seed
+random.seed(fix_seed)
+torch.manual_seed(fix_seed)
+np.random.seed(fix_seed)
 
-
-args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
+args.use_gpu = False
+#args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
 
 if args.use_gpu and args.use_multi_gpu:
     args.dvices = args.devices.replace(' ', '')
@@ -109,21 +113,9 @@ Exp = Exp_Main
 
 if args.is_training:
     for ii in range(args.itr):
-        random.seed(fix_seed_list[ii])
-        torch.manual_seed(fix_seed_list[ii])
-        np.random.seed(fix_seed_list[ii])
         # setting record of experiments
-        setting = '{}_{}_{}_ft{}_sl{}_pl{}_{}_{}_{}_seed{}'.format(
-            args.model_id,
-            args.model,
-            args.data,
-            args.features,
-            args.seq_len,
-            args.pred_len,
-            args.model_type,
-            args.des,
-            ii,
-            fix_seed_list[ii])
+        setting = '{}_{}_ft{}_seed{}_period_len{}'.format(args.model,args.model_id,args.features, args.seed, args.period_len)
+
 
         exp = Exp(args)  # set experiments
         print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
@@ -139,17 +131,7 @@ if args.is_training:
         torch.cuda.empty_cache()
 else:
     ii = 0
-    setting = '{}_{}_{}_ft{}_sl{}_pl{}_{}_{}_{}_seed{}'.format(
-        args.model_id,
-        args.model,
-        args.data,
-        args.features,
-        args.seq_len,
-        args.pred_len,
-        args.model_type,
-        args.des,
-        ii,
-        fix_seed_list[ii])
+    setting = '{}_{}_ft{}_seed{}_period_len{}'.format(args.model,args.model_id,args.features, args.seed, args.period_len)
 
     exp = Exp(args)  # set experiments
     print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
