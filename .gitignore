@@ -175,4 +175,6 @@ results/
 
 .vscode/
 
-*_result.txt
+*_result.csv
+
+*.ipynb
