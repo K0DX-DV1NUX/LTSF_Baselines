@@ -10,7 +10,6 @@ root_path_name=../dataset/
 model_name=DLinear
 train_epochs=100
 patience=20
-features=S
 num_workers=0
 learning_rate=0.01
 batch_size=128
@@ -56,7 +55,6 @@ run_experiment () {
     done
 }
 
-run_experiment ETTh1.csv ETTh1 ETTh1 S 1
-run_experiment ETTh2.csv ETTh2 ETTh2 S 1
-run_experiment ETTm1.csv ETTm1 ETTm1 S 1
-run_experiment ETTm2.csv ETTm2 ETTm2 S 1
+run_experiment electricity.csv Electricity custom S 1
+run_experiment traffic.csv Traffic custom S 1
+run_experiment weather.csv Weather custom S 1

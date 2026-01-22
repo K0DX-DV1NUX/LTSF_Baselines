@@ -358,9 +358,9 @@ class Exp_Main(Exp_Basic):
         print(f"MACS:{flops}, Params: {params}")
 
         # Save Metrics, and Params to results file.
-        f = open(f"{self.args.model}_result.txt", 'a')
+        f = open(f"{self.args.model}_result.csv", 'a')
         f.write(setting)
-        f.write('mse:{}-mae:{}-MACS:{}-Params:{};'.format(mse, mae, flops, params))
+        f.write('mse:{}-mae:{}-MACS:{}-Params:{}'.format(mse, mae, flops, params))
         f.write('\n')
         f.close()
 
