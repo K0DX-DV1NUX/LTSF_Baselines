@@ -66,7 +66,6 @@ run_experiment () {
     done
 }
 
-run_experiment ETTh1.csv ETTh1 ETTh1 S 1
-run_experiment ETTh2.csv ETTh2 ETTh2 S 1
-run_experiment ETTm1.csv ETTm1 ETTm1 S 1
-run_experiment ETTm2.csv ETTm2 ETTm2 S 1
+run_experiment electricity.csv Electricity custom S 1
+run_experiment traffic.csv Traffic custom S 1
+run_experiment weather.csv Weather custom S 1
