@@ -177,4 +177,6 @@ results/
 
 *_result.csv
 
+Result*.csv
+
 *.ipynb
