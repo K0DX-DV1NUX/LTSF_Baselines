@@ -4,104 +4,57 @@ if [ ! -d "./logs" ]; then
     mkdir ./logs
 fi
 
-model_name=DLinear
 
 root_path_name=../dataset/
+
+model_name=DLinear
 train_epochs=100
 patience=20
-features=M
+num_workers=0
+learning_rate=0.01
+batch_size=128
+lradj=type7
 
-data_path_name=weather.csv
-model_id_name=weather
-data_name=custom
+run_experiment () {
+    data_path_name=$1
+    model_id_name=$2
+    data_name=$3
+    features=$4
+    enc_in=$5
 
-for seed in $(seq 2021 2025)
-do
-for pred_len in 96 192 336 720
-do
-for seq_len in 336 512 720
-do    
-    python -u run_longExp.py \
-      --is_training 1 \
-      --individual 1 \
-      --root_path $root_path_name \
-      --data_path $data_path_name \
-      --model_id $model_id_name'_'$seq_len'_'$pred_len \
-      --model $model_name \
-      --data $data_name \
-      --features $features \
-      --train_type Linear \
-      --seq_len $seq_len \
-      --pred_len $pred_len \
-      --enc_in 21 \
-      --train_epochs $train_epochs \
-      --patience $patience \
-      --des 'Exp' \
-      --itr 1 --batch_size 128 --learning_rate 0.01
-done
-done
-done
+    for seed in $(seq 2021 2025)
+    do
+        for pred_len in 48 96 192 336 512 720
+        do
+            for seq_len in 192 336 512
+            do    
+                python -u run_longExp.py \
+                  --is_training 1 \
+                  --individual 1 \
+                  --seed $seed \
+                  --root_path $root_path_name \
+                  --data_path $data_path_name \
+                  --model_id $model_id_name \
+                  --model $model_name \
+                  --data $data_name \
+                  --features $features \
+                  --train_type Linear \
+                  --seq_len $seq_len \
+                  --pred_len $pred_len \
+                  --enc_in $enc_in \
+                  --train_epochs $train_epochs \
+                  --patience $patience \
+                  --des 'Exp' \
+                  --itr 1 \
+                  --batch_size $batch_size \
+                  --learning_rate $learning_rate \
+                  --lradj $lradj \
+                  --num_workers $num_workers
+            done
+        done
+    done
+}
 
-
-data_path_name=traffic.csv
-model_id_name=traffic
-data_name=custom
-
-for seed in $(seq 2021 2025)
-do
-for pred_len in 96 192 336 720
-do
-for seq_len in 336 512 720
-do    
-    python -u run_longExp.py \
-      --is_training 1 \
-      --individual 1 \
-      --root_path $root_path_name \
-      --data_path $data_path_name \
-      --model_id $model_id_name'_'$seq_len'_'$pred_len \
-      --model $model_name \
-      --data $data_name \
-      --features $features \
-      --train_type Linear \
-      --seq_len $seq_len \
-      --pred_len $pred_len \
-      --enc_in 862 \
-      --train_epochs $train_epochs \
-      --patience $patience \
-      --des 'Exp' \
-      --itr 1 --batch_size 128 --learning_rate 0.01
-done
-done
-done
-
-
-data_path_name=electricity.csv
-model_id_name=Electricity
-data_name=custom
-
-for seed in $(seq 2021 2025)
-do
-for pred_len in 96 192 336 720
-do
-for seq_len in 336 512 720
-do    
-    python -u run_longExp.py \
-      --is_training 1 \
-      --individual 1 \
-      --root_path $root_path_name \
-      --data_path $data_path_name \
-      --model_id $model_id_name'_'$seq_len'_'$pred_len \
-      --model $model_name \
-      --data $data_name \
-      --features $features \
-      --train_type Linear \
-      --seq_len $seq_len \
-      --pred_len $pred_len \
-      --enc_in 321 \
-      --train_epochs $train_epochs \
-      --patience $patience \
-      --des 'Exp' \
-      --itr 1 --batch_size 128 --learning_rate 0.01
-done
-done
-done
+run_experiment electricity.csv Electricity custom M 321
+run_experiment traffic.csv Traffic custom M 862
+run_experiment weather.csv Weather custom M 21

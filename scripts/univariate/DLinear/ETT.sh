@@ -10,7 +10,6 @@ root_path_name=../dataset/
 model_name=DLinear
 train_epochs=100
 patience=20
-features=S
 num_workers=0
 learning_rate=0.01
 batch_size=128
