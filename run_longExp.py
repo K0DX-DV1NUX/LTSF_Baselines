@@ -10,7 +10,7 @@ from utils.str2bool import str2bool
 # random.seed(fix_seed)
 # torch.manual_seed(fix_seed)
 # np.random.seed(fix_seed)
-parser = argparse.ArgumentParser(description='HADL & other models for Time Series Forecasting')
+parser = argparse.ArgumentParser(description='Baseline LTSF Models')
 
 # basic config
 parser.add_argument('--seed', type=int, default=2021, help='random seed')
@@ -18,6 +18,9 @@ parser.add_argument('--is_training', type=int, required=True, default=1, help='s
 parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
 parser.add_argument('--model', type=str, required=True, default='HADL', help='model name')
 parser.add_argument('--train_type', type=str, required=True, default="Linear", help="the method to calculate output: 1. Linear, 2. TCN")
+parser.add_argument('--plot_results', type=int, default=0, help='whether to plot the results: 0: False, 1: True')
+parser.add_argument('--save_results', type=int, default=0, help='whether to save the results: 0: False, 1: True')
+parser.add_argument('--delete_checkpoints', type=int, default=1, help='whether to delete the checkpoints after training: 0: False, 1: True')
 
 # data loader
 parser.add_argument('--data', type=str, required=True, default='ETTm1', help='dataset type')
@@ -150,9 +153,9 @@ args = parser.parse_args()
 
 # random seed
 fix_seed = args.seed
-# random.seed(fix_seed)
-# torch.manual_seed(fix_seed)
-# np.random.seed(fix_seed)
+random.seed(fix_seed)
+torch.manual_seed(fix_seed)
+np.random.seed(fix_seed)
 
 
 args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
@@ -171,7 +174,7 @@ Exp = Exp_Main
 if args.is_training:
     for ii in range(args.itr):
         # setting record of experiments
-        setting = '{}_{}_ft{}_sl{}_pl{}_seed{}'.format(
+        setting = '{}-{}-ft{}-sl{}-pl{}-seed{}-'.format(
             args.model,
             args.model_id,
             args.features,
@@ -186,15 +189,11 @@ if args.is_training:
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         exp.test(setting)
         
-
-        if args.do_predict:
-            print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.predict(setting, True)
-
         torch.cuda.empty_cache()
+
 else:
     ii = 0
-    setting = '{}_{}_ft{}_sl{}_pl{}_seed{}'.format(
+    setting = '{}-{}-ft{}-sl{}-pl{}-seed{}-'.format(
             args.model,
             args.model_id,
             args.features,

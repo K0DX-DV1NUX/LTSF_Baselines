@@ -4,7 +4,7 @@ from models import DLinear, ModernTCN, PatchTST, SparseTSF, iTransformer, FrNet
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
 
-
+import shutil
 import pandas
 import numpy as np
 import torch
@@ -18,7 +18,7 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 
-from fvcore.nn import FlopCountAnalysis, parameter_count_table
+from fvcore.nn import FlopCountAnalysis
 
 warnings.filterwarnings('ignore')
 
@@ -248,11 +248,13 @@ class Exp_Main(Exp_Basic):
         preds = []
         trues = []
         inputx = []
-        folder_path = './test_results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
 
-        ## Inputs for FlopCounts for fvncore
+        if self.args.plot_results:
+            folder_path = './test_results/' + setting + '/'
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+
+        # Inputs for FlopCounts for fvncore
         profile_x = None
         profile_x_mark = None
         profile_y_mark = None
@@ -273,7 +275,7 @@ class Exp_Main(Exp_Basic):
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-                ## Creating profiles for Fvncore
+                # Creating profiles for Fvncore
                 if i==0:
                     profile_x = torch.randn(batch_x.shape).to(self.device)
                     profile_x_mark = torch.randn(batch_x_mark.shape).to(self.device)
@@ -305,7 +307,7 @@ class Exp_Main(Exp_Basic):
                             outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
-                # print(outputs.shape,batch_y.shape)
+
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
@@ -320,19 +322,17 @@ class Exp_Main(Exp_Basic):
                 preds.append(pred)
                 trues.append(true)
                 inputx.append(batch_x.detach().cpu().numpy())
-                if i % 20 == 0:
-                    input = batch_x.detach().cpu().numpy()
-                    if test_data.scale and self.args.inverse:
-                        shape = input.shape
-                        input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
-        if self.args.test_flop:
-            macs, params = test_params_flop(self.model, (batch_x.shape[1],batch_x.shape[2]))
-            # test_params_flop((batch_x.shape[1], batch_x.shape[2]))
-            exit()
+                # If Plotting Results is enabled: 0=False, 1=True
+                if self.args.plot_results:
+                    if i % 20 == 0:
+                        input = batch_x.detach().cpu().numpy()
+                        if test_data.scale and self.args.inverse:
+                            shape = input.shape
+                            input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
+                        gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
+                        pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+                        visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         # fixed bug
         preds = np.concatenate(preds, axis=0)
@@ -343,12 +343,11 @@ class Exp_Main(Exp_Basic):
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
         inputx = inputx.reshape(-1, inputx.shape[-2], inputx.shape[-1])
 
-        # result save
-        folder_path = './results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
+        
+        #Calculate Metrics.
         mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
+
+        #Calculate FLOPS and Params.
         if self.args.model in ("iTransformer"):
             flops = FlopCountAnalysis(self.model, inputs=(profile_x, profile_x_mark, profile_dec_inp, profile_y_mark)).total()
         else:
@@ -357,16 +356,26 @@ class Exp_Main(Exp_Basic):
         params = sum(p.numel() for p in self.model.parameters())
         print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
         print(f"MACS:{flops}, Params: {params}")
+
+        # Save Metrics, and Params to results file.
         f = open(f"{self.args.model}_result.txt", 'a')
-        f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
-        f.write(f"\n MACS:{flops}, Params: {params} ")
-        f.write('\n')
+        f.write(setting)
+        f.write('mse:{}-mae:{}-MACS:{}-Params:{};'.format(mse, mae, flops, params))
         f.write('\n')
         f.close()
 
-        # np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe,rse, corr]))
-        np.save(folder_path + 'pred.npy', preds)
-        np.save(folder_path + 'true.npy', trues)
-        # np.save(folder_path + 'x.npy', inputx)
+        # Delete Checkpoints if enabled: 0=False, 1=True
+        if self.args.delete_checkpoints:
+            checkpoint_path = os.path.join('./checkpoints/' + setting)
+            if os.path.exists(checkpoint_path):
+                shutil.rmtree(checkpoint_path)
+
+        # If Saving Results is enabled: 0=False, 1=True
+        if self.args.save_results:
+            folder_path = './results/' + setting + '/'
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+            np.save(folder_path + 'pred.npy', preds)
+            np.save(folder_path + 'true.npy', trues)
+
         return
