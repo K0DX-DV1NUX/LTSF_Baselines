@@ -11,7 +11,6 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from data_provider.data_factory import data_provider
-from exp.exp_basic import Exp_Basic
 from models import DLinear, ModernTCN, PatchTST, SparseTSF, iTransformer, FrNet
 from utils.tools import EarlyStopping, adjust_learning_rate, visual #test_params_flop
 from utils.metrics import metric
@@ -20,14 +19,33 @@ from fvcore.nn import FlopCountAnalysis
 
 
 
-class Exp_Main(Exp_Basic):
+class Exp_Main:
     '''
-    Main experiment class that handles training and testing of the model. It inherits 
+    Main experiment class that handles training and testing of the model. It inherits
     from Exp_Basic and implements the necessary methods for building the model, 
     getting data, selecting optimizer and criterion, training, and testing.
     '''
     def __init__(self, args):
-        super(Exp_Main, self).__init__(args)
+        self.args = args
+        self.device = self._acquire_device()
+        self.model = self._build_model().to(self.device)
+
+    def _acquire_device(self):
+        '''
+        This method checks if GPU is available and sets the device accordingly. 
+        If GPU is available and use_gpu flag is set, it sets the device to the 
+        specified GPU. If use_multi GPU flag is set, it allows the use of multiple 
+        GPUs. If GPU is not available, it sets the device to CPU.
+        '''
+        if self.args.use_gpu:
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(
+                self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
+            device = torch.device('cuda:{}'.format(self.args.gpu))
+            print('Use GPU: cuda:{}'.format(self.args.gpu))
+        else:
+            device = torch.device('cpu')
+            print('Use CPU')
+        return device
 
     def _build_model(self):
         '''
@@ -341,6 +359,14 @@ class Exp_Main(Exp_Basic):
         return self.model
 
     def test(self, setting, test=0):
+        '''
+        This method handles the testing of the model. It first gets the test data loader, 
+        and if the test flag is set, it loads the best model from the checkpoint directory. 
+        It then iterates through the test data, makes predictions using the model, and 
+        calculates various metrics (MAE, MSE, RMSE, MAPE, MSPE, RSE, Correlation) to evaluate
+        the performance of the model on the test set. The results are saved to a CSV 
+        file and optionally plotted and saved as numpy arrays.
+        '''
         test_data, test_loader = self._get_data(flag='test')
 
         if test:
@@ -445,7 +471,7 @@ class Exp_Main(Exp_Basic):
 
         # Save Metrics, and Params to results file.
         with open(f"Result_{self.args.model}.csv", 'a') as f:
-            f.write(f"{setting},{mse},{mae}\n")
+            f.write(f"{setting}mse:{mse}-mae:{mae}\n")
 
         # Delete Checkpoints if enabled: 0=False, 1=True
         if self.args.delete_checkpoints:
