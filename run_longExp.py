@@ -6,10 +6,6 @@ import random
 import numpy as np
 from utils.str2bool import str2bool
 
-# fix_seed = 2021
-# random.seed(fix_seed)
-# torch.manual_seed(fix_seed)
-# np.random.seed(fix_seed)
 parser = argparse.ArgumentParser(description='Baseline LTSF Models')
 
 # basic config
@@ -17,7 +13,7 @@ parser.add_argument('--seed', type=int, default=2021, help='random seed')
 parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
 parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
 parser.add_argument('--model', type=str, required=True, default='HADL', help='model name')
-parser.add_argument('--train_type', type=str, required=True, default="Linear", help="the method to calculate output: 1. Linear, 2. TCN")
+parser.add_argument('--model_input_type', type=str, required=True, default="x_only")
 parser.add_argument('--plot_results', type=int, default=0, help='whether to plot the results: 0: False, 1: True')
 parser.add_argument('--save_results', type=int, default=0, help='whether to save the results: 0: False, 1: True')
 parser.add_argument('--delete_checkpoints', type=int, default=1, help='whether to delete the checkpoints after training: 0: False, 1: True')
@@ -40,17 +36,6 @@ parser.add_argument('--pred_len', type=int, default=96, help='prediction sequenc
 
 # DLinear
 parser.add_argument('--individual', type=int, default=0, help='individual head; True 1 False 0') # Used by PatchTST too.
-
-# HADL
-parser.add_argument('--rank', type=int, default=50, help='rank of low rank matrix')
-parser.add_argument('--enable_lowrank', type=int, default=1, help='enable low rank approximation; True 1 False 0')
-parser.add_argument('--enable_Haar', type=int, default=1, help='enable Haar wavelet transformation; True 1 False 0')
-parser.add_argument('--enable_DCT', type=int, default=1, help='enable DCT transformation; True 1 False 0')
-parser.add_argument('--enable_iDCT', type=int, default=0, help='enable inverse DCT transformation; True 1 False 0')
-parser.add_argument('--bias', type=int, default=1, help='enable bias; True 1 False 0')
-#regularization
-parser.add_argument('--regularizer', type=int, default=0, help="initiate regularizer; True 1 False 0")
-parser.add_argument('--regularization_rate', type=float, default=0.1, help="add the rate of L1 regularization.")
 
 # PatchTST
 parser.add_argument('--fc_dropout', type=float, default=0.05, help='fully connected dropout')
@@ -131,7 +116,7 @@ parser.add_argument('--do_predict', action='store_true', help='whether to predic
 
 # optimization
 parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
-parser.add_argument('--itr', type=int, default=2, help='experiments times')
+#parser.add_argument('--itr', type=int, default=2, help='experiments times')
 parser.add_argument('--train_epochs', type=int, default=100, help='train epochs')
 parser.add_argument('--batch_size', type=int, default=32, help='batch size of train input data')
 parser.add_argument('--patience', type=int, default=6, help='early stopping patience')
@@ -151,29 +136,38 @@ parser.add_argument('--test_flop', action='store_true', default=False, help='See
 
 args = parser.parse_args()
 
-# random seed
+# Fix random seeds for reproducibility. 
+# Note that for some models, even with fixed seeds, 
+# there may still be some randomness due to non-deterministic 
+# operations in PyTorch or other libraries.
 fix_seed = args.seed
 random.seed(fix_seed)
 torch.manual_seed(fix_seed)
 np.random.seed(fix_seed)
 
 
+# GPU settings
 args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
 
+# If using multiple GPUs, set up the device ids and the primary gpu.
 if args.use_gpu and args.use_multi_gpu:
     args.dvices = args.devices.replace(' ', '')
     device_ids = args.devices.split(',')
     args.device_ids = [int(id_) for id_ in device_ids]
     args.gpu = args.device_ids[0]
 
+# Print the arguments for the experiment. 
+# This is useful for logging and reproducibility.
 print('Args in experiment:')
 print(args)
 
+
 Exp = Exp_Main
 
+# Run the experiment. 
+# If --is_training is 1, it will train and test the model.
 if args.is_training:
-    for ii in range(args.itr):
-        # setting record of experiments
+        # Set up the experiment name and description for logging and checkpointing.
         setting = '{}-{}-ft{}-sl{}-pl{}-seed{}-'.format(
             args.model,
             args.model_id,
@@ -181,8 +175,9 @@ if args.is_training:
             args.seq_len,
             args.pred_len,
             args.seed)
-
-        exp = Exp(args)  # set experiments
+        
+        # Initialize the experiment with the given arguments.
+        exp = Exp(args)
         print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
         exp.train(setting)
         
@@ -191,8 +186,8 @@ if args.is_training:
         
         torch.cuda.empty_cache()
 
+# If --is_training is 0, it will only test the model.
 else:
-    ii = 0
     setting = '{}-{}-ft{}-sl{}-pl{}-seed{}-'.format(
             args.model,
             args.model_id,
@@ -201,7 +196,7 @@ else:
             args.pred_len,
             args.seed)
 
-    exp = Exp(args)  # set experiments
+    exp = Exp(args) 
     print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
     exp.test(setting, test=1)
     torch.cuda.empty_cache()

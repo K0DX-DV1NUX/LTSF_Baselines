@@ -1,11 +1,5 @@
-from data_provider.data_factory import data_provider
-from exp.exp_basic import Exp_Basic
-from models import DLinear, ModernTCN, PatchTST, SparseTSF, iTransformer, FrNet
-from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
-from utils.metrics import metric
-
+from contextlib import nullcontext
 import shutil
-import pandas
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,20 +7,38 @@ from torch import optim
 from torch.optim import lr_scheduler
 import os
 import time
-
 import warnings
-import matplotlib.pyplot as plt
-import numpy as np
+warnings.filterwarnings('ignore')
+
+from data_provider.data_factory import data_provider
+from exp.exp_basic import Exp_Basic
+from models import DLinear, ModernTCN, PatchTST, SparseTSF, iTransformer, FrNet
+from utils.tools import EarlyStopping, adjust_learning_rate, visual #test_params_flop
+from utils.metrics import metric
 
 from fvcore.nn import FlopCountAnalysis
 
-warnings.filterwarnings('ignore')
+
 
 class Exp_Main(Exp_Basic):
+    '''
+    Main experiment class that handles training and testing of the model. It inherits 
+    from Exp_Basic and implements the necessary methods for building the model, 
+    getting data, selecting optimizer and criterion, training, and testing.
+    '''
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
 
     def _build_model(self):
+        '''
+        This method builds the model based on the specified architecture in the arguments.
+        It uses a dictionary to map model names to their corresponding classes and 
+        initializes the model with the given arguments.
+        
+        Add your model to the dictionary if you want to use it in the experiment. 
+        Make sure to import the model at the top of this file.
+        '''
+        
         model_dict = {
             'DLinear': DLinear,
             'PatchTST': PatchTST,
@@ -35,106 +47,187 @@ class Exp_Main(Exp_Basic):
             'ModernTCN': ModernTCN,
             'FrNet': FrNet,
         }
+        
         model = model_dict[self.args.model].Model(self.args).float()
 
+        # If multiple GPUs are to be used and GPU is available, 
+        # wrap the model with DataParallel for multi-GPU training.
         if self.args.use_multi_gpu and self.args.use_gpu:
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
+        
         return model
 
     def _get_data(self, flag):
+        '''
+        Gets the dataset and dataloader for the specified flag (train, val, test)
+        using the data_provider function.
+        '''
+        
         data_set, data_loader = data_provider(self.args, flag)
+
         return data_set, data_loader
 
     def _select_optimizer(self):
+        '''
+        Selects the optimizer for training the model. Currently, it uses Adam optimizer
+        with the learning rate specified in the arguments. 
+        '''
+        
         model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+        
         return model_optim
 
     def _select_criterion(self):
-        if self.args.loss == "mae":
-            criterion = nn.L1Loss()
-        elif self.args.loss == "mse":
-            criterion = nn.MSELoss()
-        elif self.args.loss == "smooth":
-            criterion = nn.SmoothL1Loss()
-        else:
-            criterion = nn.MSELoss()
+        '''
+        Selects the loss function for training the model. Currently, it uses MSELoss
+        with the loss specified in the arguments. Add more loss functions to the 
+        losses_dict if needed.
+        '''
+        
+        losses_dict = {
+            'mae': nn.L1Loss(),
+            'mse': nn.MSELoss(),
+            'smooth': nn.SmoothL1Loss(),
+        }
+        criterion = losses_dict.get(self.args.loss, nn.MSELoss())
+        
         return criterion
 
 
+    def _get_inputs(self, x, y, x_mark, y_mark):
+        '''
+        This method prepares the inputs for the model during training and validation. 
+        It moves the input data (batch_x, batch_y) to the appropriate device (CPU or GPU) 
+        for computation. For certain datasets like PEMS and Solar, the time features 
+        (batch_x_mark and batch_y_mark) are not used, so they are set to None. 
+        For other datasets, they are moved to the appropriate device for computation. 
+        The decoder input is created by concatenating the known part of the target 
+        sequence (label_len) with a zero tensor for the unknown part (pred_len). 
+        This is used as input to the decoder during training and validation.
+        '''
+        # Move the input data (batch_x, batch_y) to the appropriate device (CPU or GPU)
+        # for computation.
+        batch_x = x.float().to(self.device)
+        batch_y = y.float().to(self.device)
+        
+        # For certain datasets like PEMS and Solar, the time features (batch_x_mark and batch_y_mark)
+        # are not used, so they are set to None. For other datasets, they are moved to the appropriate device for computation.
+        if 'PEMS' in self.args.data or 'Solar' in self.args.data:
+            batch_x_mark = None
+            batch_y_mark = None
+        else:
+            batch_x_mark = x_mark.float().to(self.device)
+            batch_y_mark = y_mark.float().to(self.device)
+
+        # Decoder input is created by concatenating the known part of the target sequence
+        # (label_len) with a zero tensor for the unknown part (pred_len). 
+        # This is used as input to the decoder during training and validation.
+        dec_inp = torch.zeros_like(y[:, -self.args.pred_len:, :]).float()
+        dec_inp = torch.cat([y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+        return batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp
+
+            
 
     def vali(self, vali_data, vali_loader, criterion):
+        '''
+        This method evaluates the model on the validation set. It iterates 
+        through the validation dataloader, makes predictions using the model,
+        and calculates the loss using the specified criterion. The average loss
+        over the validation set is returned. The model is set to evaluation mode
+        during this process and then switched back to training mode at the end.
+        '''
+        
+        # List to store the loss for each batch in the validation set.
         total_loss = []
+        
+        # Set the model to evaluation mode to disable dropout and batch normalization layers.
         self.model.eval()
+        
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.float().to(self.device)
-                if 'PEMS' in self.args.data or 'Solar' in self.args.data:
-                    batch_x_mark = None
-                    batch_y_mark = None
-                else:
-                    batch_x_mark = batch_x_mark.float().to(self.device)
-                    batch_y_mark = batch_y_mark.float().to(self.device)
+            for _, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+                
+                batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = self._get_inputs(batch_x, batch_y, batch_x_mark, batch_y_mark)
 
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
-                # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if self.args.train_type.lower()=="linear":
-                            outputs = self.model(batch_x)
-                        elif self.args.train_type.lower()=="tcn":
-                            outputs = self.model(batch_x, batch_x_mark)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                # Use automatic mixed precision for inference if enabled. 
+                # This can speed up inference on compatible hardware.
+                amp_context = torch.cuda.amp.autocast() if self.args.use_amp else nullcontext()
+
+                input_type = self.args.model_input_type.lower()
+
+                if input_type == "x_only":
+                    model_args = (batch_x,)
+                elif input_type == "x_mark_incl":
+                    model_args = (batch_x, batch_x_mark)
                 else:
-                    if self.args.train_type.lower()=="linear":
-                            outputs = self.model(batch_x)
-                    elif self.args.train_type.lower()=="tcn":
-                            outputs = self.model(batch_x, batch_x_mark)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    
+                with amp_context:
+                    outputs = self.model(*model_args)
+                
+                if input_type not in ["x_only", "x_mark_incl"] and self.args.output_attention:
+                    outputs = outputs[0]
+
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
-
                 loss = criterion(pred, true)
-
                 total_loss.append(loss)
+
         total_loss = np.average(total_loss)
+
         self.model.train()
+
         return total_loss
 
     def train(self, setting):
+        '''
+        This method handles the training loop for the model. It first gets the training,
+        validation, and test data loaders. It then sets up the checkpoint directory, 
+        initializes the optimizer, criterion, and learning rate scheduler. The training 
+        loop iterates over the specified number of epochs, where in each epoch it iterates
+        over the training data, makes predictions, calculates the loss, and updates the 
+        model parameters.
+        '''
+        
+        # Get the training, validation, and test data loaders.
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
 
+        # Set up the checkpoint directory for saving the best model during training. The path
+        # is constructed using the base checkpoints directory and the specific setting for 
+        # this experiment. If the directory does not exist it is created.
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
             os.makedirs(path)
 
         time_now = time.time()
 
+        # Calculate the number of training steps per epoch based on the length of the training 
+        # data loader.
         train_steps = len(train_loader)
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
 
+        # Initialize the optimizer, criterion, and learning rate scheduler for training. 
+        # The optimizer is selected using the _select_optimizer method, and 
+        # the criterion is selected using the _select_criterion method.
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
 
+        # If automatic mixed precision is enabled, initialize the GradScaler for scaling 
+        # the loss during backpropagation.
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
+        # Set up the learning rate scheduler. If the learning rate adjustment method is 'TST',
+        # it uses the OneCycleLR scheduler which adjusts the learning rate according to an annealing
+        # strategy. The scheduler is configured with the number of steps per epoch, percentage 
+        # of the cycle for increasing the learning rate, total number of epochs, and the maximum
+        # learning rate specified in the arguments.
         scheduler = lr_scheduler.OneCycleLR(optimizer=model_optim,
                                             steps_per_epoch=train_steps,
                                             pct_start=self.args.pct_start,
@@ -146,63 +239,61 @@ class Exp_Main(Exp_Basic):
             train_loss = []
             self.model.train()
             epoch_time = time.time()
+            
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
                 iter_count += 1
+
+                # Clear the gradients of the model parameters before backpropagation. This is 
+                # necessary to prevent the accumulation of gradients from multiple batches, 
+                # which can lead to incorrect updates of the model parameters.
                 model_optim.zero_grad()
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.float().to(self.device)
-                
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-                # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if self.args.train_type.lower()=="linear":
-                            outputs = self.model(batch_x)
-                        elif self.args.train_type.lower()=="tcn":
-                            outputs = self.model(batch_x, batch_x_mark)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = self._get_inputs(batch_x, batch_y, batch_x_mark, batch_y_mark)
 
-                        f_dim = -1 if self.args.features == 'MS' else 0
-                        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                        batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                        loss = criterion(outputs, batch_y)
-                        train_loss.append(loss.item())
+                # Use automatic mixed precision for inference if enabled. 
+                # This can speed up inference on compatible hardware.
+                amp_context = torch.cuda.amp.autocast() if self.args.use_amp else nullcontext()
+
+                input_type = self.args.model_input_type.lower()
+
+                if input_type == "x_only":
+                    model_args = (batch_x,)
+                elif input_type == "x_mark_incl":
+                    model_args = (batch_x, batch_x_mark)
                 else:
-                    if self.args.train_type.lower()=="linear":
-                        outputs = self.model(batch_x)
-                    elif self.args.train_type.lower()=="tcn":
-                        outputs = self.model(batch_x, batch_x_mark)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                    # print(outputs.shape,batch_y.shape)
-                    f_dim = -1 if self.args.features == 'MS' else 0
-                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                    model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     
-                    if self.args.regularizer:
-                        loss = criterion(outputs, batch_y) + self.args.regularization_rate * torch.mean(torch.abs(outputs))
-                    else:
-                        loss = criterion(outputs, batch_y)
-                    train_loss.append(loss.item())
+                with amp_context:
+                    outputs = self.model(*model_args)
+                
+                if input_type not in ["x_only", "x_mark_incl"] and self.args.output_attention:
+                    outputs = outputs[0]
 
+                f_dim = -1 if self.args.features == 'MS' else 0
+                outputs = outputs[:, -self.args.pred_len:, f_dim:]
+                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+
+                loss = criterion(outputs, batch_y)
+                train_loss.append(loss.item())
+
+                # Print training progress every 100 iterations. It calculates the speed 
+                # of training and the estimated time left for the current epoch based 
+                # on the number of iterations completed and the total number of iterations
+                # in the epoch. The loss for the current batch is also printed.
                 if (i + 1) % 100 == 0:
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
+                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
                     time_now = time.time()
 
+                # Backpropagation and optimization step. If automatic mixed precision 
+                # is enabled, the loss is scaled before backpropagation to prevent 
+                # underflow issues. The optimizer step is also performed using the scaled
+                # gradients, and the scaler is updated after the step.
+                # If automatic mixed precision is not enabled, the loss is backpropagated
+                # and the optimizer step is performed in the standard way.
                 if self.args.use_amp:
                     scaler.scale(loss).backward()
                     scaler.step(model_optim)
@@ -211,6 +302,8 @@ class Exp_Main(Exp_Basic):
                     loss.backward()
                     model_optim.step()
 
+                # Adjust the learning rate using the scheduler. If the learning rate adjustment method is 'TST',
+                # the learning rate is adjusted according to the OneCycleLR scheduler after each batch.
                 if self.args.lradj == 'TST':
                     adjust_learning_rate(model_optim, scheduler, epoch + 1, self.args, printout=False)
                     scheduler.step()
@@ -222,16 +315,25 @@ class Exp_Main(Exp_Basic):
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+            
+            # Check for early stopping based on the validation loss. The EarlyStopping class 
+            # is used to monitor the validation loss and save the best model. If the 
+            # validation loss does not improve for a specified number of epochs (patience),
+            # the training loop will be stopped early to prevent overfitting.
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
 
+            # Adjust the learning rate using the scheduler if the learning rate adjustment method is not 'TST'.
+            # If the method is 'TST', the learning rate is already adjusted after each batch, 
+            # so it is not adjusted again here.    
             if self.args.lradj != 'TST':
                 adjust_learning_rate(model_optim, scheduler, epoch + 1, self.args)
             else:
                 print('Updating learning rate to {}'.format(scheduler.get_last_lr()[0]))
 
+        # After training is complete, the best model is loaded from the checkpoint directory for testing.
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path, map_location="cpu"))
 
@@ -255,69 +357,53 @@ class Exp_Main(Exp_Basic):
                 os.makedirs(folder_path)
 
         # Inputs for FlopCounts for fvncore
-        profile_x = None
-        profile_x_mark = None
-        profile_y_mark = None
-        profile_dec_inp = None
+        # profile_x = None
+        # profile_x_mark = None
+        # profile_y_mark = None
+        # profile_dec_inp = None
 
         self.model.eval()
         if self.args.call_structural_reparam and hasattr(self.model, 'structural_reparam'):
             self.model.structural_reparam()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.float().to(self.device)
-               
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
+                batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = self._get_inputs(batch_x, batch_y, batch_x_mark, batch_y_mark)
 
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+                # # Creating profiles for Fvncore
+                # if i==0:
+                #     profile_x = torch.randn(batch_x.shape).to(self.device)
+                #     profile_x_mark = torch.randn(batch_x_mark.shape).to(self.device)
+                #     profile_y_mark = torch.randn(batch_y_mark.shape).to(self.device)
+                #     profile_dec_inp = torch.randn(dec_inp.shape).to(self.device)
 
-                # Creating profiles for Fvncore
-                if i==0:
-                    profile_x = torch.randn(batch_x.shape).to(self.device)
-                    profile_x_mark = torch.randn(batch_x_mark.shape).to(self.device)
-                    profile_y_mark = torch.randn(batch_y_mark.shape).to(self.device)
-                    profile_dec_inp = torch.randn(dec_inp.shape).to(self.device)
+                input_type = self.args.model_input_type.lower()
 
-                # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if self.args.train_type.lower()=="linear":
-                            outputs = self.model(batch_x)
-                        elif self.args.train_type.lower()=="tcn":
-                            outputs = self.model(batch_x, batch_x_mark)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                if input_type == "x_only":
+                    model_args = (batch_x,)
+                elif input_type == "x_mark_incl":
+                    model_args = (batch_x, batch_x_mark)
                 else:
-                    if self.args.train_type.lower()=="linear":
-                        outputs = self.model(batch_x)
-                    elif self.args.train_type.lower()=="tcn":
-                        outputs = self.model(batch_x, batch_x_mark)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                    model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                
+                outputs = self.model(*model_args)
 
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                if input_type not in ["x_only", "x_mark_incl"] and self.args.output_attention:
+                    outputs = outputs[0]
+
 
                 f_dim = -1 if self.args.features == 'MS' else 0
-
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
+
                 if test_data.scale and self.args.inverse:
                     shape = outputs.shape
                     outputs = test_data.inverse_transform(outputs.squeeze(0)).reshape(shape)
                     batch_y = test_data.inverse_transform(batch_y.squeeze(0)).reshape(shape)
-                pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
-                true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
+                pred = outputs
+                true = batch_y
 
                 preds.append(pred)
                 trues.append(true)
@@ -347,22 +433,19 @@ class Exp_Main(Exp_Basic):
         #Calculate Metrics.
         mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
 
-        #Calculate FLOPS and Params.
-        if self.args.model in ("iTransformer"):
-            flops = FlopCountAnalysis(self.model, inputs=(profile_x, profile_x_mark, profile_dec_inp, profile_y_mark)).total()
-        else:
-            flops = FlopCountAnalysis(self.model, profile_x).total()
+        # #Calculate FLOPS and Params.
+        # if self.args.model in ("iTransformer"):
+        #     flops = FlopCountAnalysis(self.model, inputs=(profile_x, profile_x_mark, profile_dec_inp, profile_y_mark)).total()
+        # else:
+        #     flops = FlopCountAnalysis(self.model, profile_x).total()
 
-        params = sum(p.numel() for p in self.model.parameters())
-        print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
-        print(f"MACS:{flops}, Params: {params}")
+        # params = sum(p.numel() for p in self.model.parameters())
+        # print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
+        # print(f"MACS:{flops}, Params: {params}")
 
         # Save Metrics, and Params to results file.
-        f = open(f"Result_{self.args.model}.csv", 'a')
-        f.write(setting)
-        f.write('mse:{}-mae:{}-MACS:{}-Params:{}'.format(mse, mae, flops, params))
-        f.write('\n')
-        f.close()
+        with open(f"Result_{self.args.model}.csv", 'a') as f:
+            f.write(f"{setting},{mse},{mae}\n")
 
         # Delete Checkpoints if enabled: 0=False, 1=True
         if self.args.delete_checkpoints:
