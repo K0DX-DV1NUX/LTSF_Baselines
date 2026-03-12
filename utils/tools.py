@@ -8,42 +8,6 @@ import torch.nn.functional as F
 import os
 
 
-plt.switch_backend('agg')
-
-
-def adjust_learning_rate(optimizer, scheduler, epoch, args, printout=True):
-    # lr = args.d_learning_rate * (0.2 ** (epoch // 2))
-    if args.d_lradj == 'type1':
-        lr_adjust = {epoch: args.d_learning_rate * (0.5 ** ((epoch - 1) // 1))}
-    elif args.d_lradj == 'type2':
-        lr_adjust = {
-            2: 5e-5, 4: 1e-5, 6: 5e-6, 8: 1e-6,
-            10: 5e-7, 15: 1e-7, 20: 5e-8
-        }
-    elif args.d_lradj == 'type3':
-        lr_adjust = {epoch: args.d_learning_rate if epoch < 3 else args.d_learning_rate * (0.8 ** ((epoch - 3) // 1))}
-    elif args.d_lradj == 'constant':
-        lr_adjust = {epoch: args.d_learning_rate}
-    elif args.d_lradj == '3':
-        lr_adjust = {epoch: args.d_learning_rate if epoch < 10 else args.d_learning_rate*0.1}
-    elif args.d_lradj == '4':
-        lr_adjust = {epoch: args.d_learning_rate if epoch < 15 else args.d_learning_rate*0.1}
-    elif args.d_lradj == '5':
-        lr_adjust = {epoch: args.d_learning_rate if epoch < 25 else args.d_learning_rate*0.1}
-    elif args.d_lradj == '6':
-        lr_adjust = {epoch: args.d_learning_rate if epoch < 5 else args.d_learning_rate*0.1}
-    elif args.d_lradj == 'type7':
-        lr_adjust = {epoch: max(args.d_learning_rate * (0.7 ** max((epoch - 4) // 4, 0)), 1e-10)}
-    elif args.d_lradj == 'TST':
-        lr_adjust = {epoch: scheduler.get_last_lr()[0]}
-    
-    if epoch in lr_adjust.keys():
-        lr = lr_adjust[epoch]
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-        if printout: print('Updating learning rate to {}'.format(lr))
-
-
 class EarlyStopping:
     def __init__(self, patience=7, verbose=False, delta=0):
         self.patience = patience
@@ -76,35 +40,52 @@ class EarlyStopping:
         self.val_loss_min = val_loss
 
 
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
+# class dotdict(dict):
+#     """dot.notation access to dictionary attributes"""
+#     __getattr__ = dict.get
+#     __setattr__ = dict.__setitem__
+#     __delattr__ = dict.__delitem__
 
 
-class StandardScaler():
-    def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
+# class StandardScaler():
+#     def __init__(self, mean, std):
+#         self.mean = mean
+#         self.std = std
 
-    def transform(self, data):
-        return (data - self.mean) / self.std
+#     def transform(self, data):
+#         return (data - self.mean) / self.std
 
-    def inverse_transform(self, data):
-        return (data * self.std) + self.mean
+#     def inverse_transform(self, data):
+#         return (data * self.std) + self.mean
 
 
-def visual(true, preds=None, name='./pic/test.pdf'):
+# def visual(true, preds=None, name='./pic/test.pdf'):
+#     """
+#     Results visualization
+#     """
+#     plt.figure()
+#     plt.plot(true, label='GroundTruth', linewidth=2)
+#     if preds is not None:
+#         plt.plot(preds, label='Prediction', linewidth=2)
+#     plt.legend()
+#     plt.savefig(name, bbox_inches='tight')
+
+    
+def check_and_prepare_dirs(args):
     """
-    Results visualization
+    Check if required directories exist and create output directories if they don't.
     """
-    plt.figure()
-    plt.plot(true, label='GroundTruth', linewidth=2)
-    if preds is not None:
-        plt.plot(preds, label='Prediction', linewidth=2)
-    plt.legend()
-    plt.savefig(name, bbox_inches='tight')
+
+    output_dirs = {
+        "plots_dir": os.path.join("./plots/", args.d_setting),
+        "checkpoints_dir": f"{args.d_checkpoints}/{args.d_setting}",
+        "results_dir": os.path.join("./results/", args.d_setting),
+    }
+
+    for name, path in output_dirs.items():
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+            print(f"Created directory: {path}")
 
 # def test_params_flop(model,x_shape):
 #     """
@@ -127,19 +108,3 @@ def visual(true, preds=None, name='./pic/test.pdf'):
 #         print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
 #         print('{:<30}  {:<8}'.format('Number of parameters: ', params))
 #         return macs, params
-    
-def check_and_prepare_dirs(args):
-    """
-    Check if required directories exist and create output directories if they don't.
-    """
-
-    output_dirs = {
-        "plots_dir": os.path.join("./plots/", args.d_setting),
-        "checkpoints_dir": f"{args.d_checkpoints}/{args.d_setting}",
-        "results_dir": os.path.join("./results/", args.d_setting),
-    }
-
-    for name, path in output_dirs.items():
-        if not os.path.exists(path):
-            os.makedirs(path, exist_ok=True)
-            print(f"Created directory: {path}")

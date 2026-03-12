@@ -35,7 +35,7 @@ class HourOfDay(TimeFeature):
     """Hour of day encoded as value between [-0.5, 0.5]"""
 
     def __call__(self, index: pd.DatetimeIndex) -> np.ndarray:
-        return index.hour / 23.0 - 0.5
+        return index.hour.to_numpy() / 23.0 - 0.5
 
 
 class DayOfWeek(TimeFeature):
@@ -70,7 +70,7 @@ class WeekOfYear(TimeFeature):
     """Week of year encoded as value between [-0.5, 0.5]"""
 
     def __call__(self, index: pd.DatetimeIndex) -> np.ndarray:
-        return (index.isocalendar().week - 1) / 52.0 - 0.5
+        return (index.isocalendar().week.to_numpy() - 1) / 52.0 - 0.5
 
 
 def time_features_from_frequency_str(freq_str: str) -> List[TimeFeature]:

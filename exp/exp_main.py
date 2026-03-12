@@ -15,7 +15,8 @@ from torch.utils.data import DataLoader
 
 from data_provider.data_factory import TimeSeriesDataset
 from models import DLinear, ModernTCN, PatchTST, SparseTSF, iTransformer, FrNet
-from utils.tools import EarlyStopping, adjust_learning_rate
+from utils.learning_rates import adjust_learning_rate
+from utils.tools import EarlyStopping
 from utils.metrics import metric
 
 
@@ -492,14 +493,14 @@ class Exp_Main:
 
 
         #Calculate Metrics.
-        mae, mse, rmse, mape, mspe, rse, corr = metric(flat_preds, flat_trues)
+        mae, mse, rmse, mape, mspe, rse, corr, r2 = metric(flat_preds, flat_trues)
 
 
         print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
         
 
-        with open(f"Result_{self.args.model}.csv", 'a') as f:
-            f.write(f"{setting}mse:{mse}-mae:{mae}\n")
+        with open(f"Result_{self.args.d_model}.csv", 'a') as f:
+            f.write(f"{setting}-mse:{mse}-mae:{mae}\n")
 
 
         return flat_preds, flat_trues
