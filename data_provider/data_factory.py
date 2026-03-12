@@ -1,51 +1,171 @@
-from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_Pred
-from torch.utils.data import DataLoader
+import os
+import numpy as np
+import pandas as pd
+from torch.utils.data import Dataset
+from sklearn.preprocessing import StandardScaler
+from utils.timefeatures import time_features
+import joblib
+import warnings
+warnings.filterwarnings('ignore')
 
-data_dict = {
-    'ETTh1': Dataset_ETT_hour,
-    'ETTh2': Dataset_ETT_hour,
-    'ETTm1': Dataset_ETT_minute,
-    'ETTm2': Dataset_ETT_minute,
-    'custom': Dataset_Custom,
-}
+class TimeSeriesDataset(Dataset):
+
+    def __init__(
+        self,
+        args,
+        flag,
+        stride,
+        timeenc=0,
+        split_ratio=(0.7, 0.1, 0.2),
+    ):
+
+        
+        self.seq_len = args.d_seq_len
+        self.label_len = args.d_label_len
+        self.pred_len = args.d_pred_len
+        self.stride = stride
+        self.is_training = args.d_is_training
+
+        self.features = args.d_features
+        self.target = args.d_target
+        self.timeenc = timeenc
+        self.freq = args.d_freq
+
+        self.root_path = args.d_root_path
+        self.data_path = args.d_data_path
+        self.checkpoints_path = f"{args.d_checkpoints}/{args.d_setting}"
+
+        assert flag in ['train', 'val', 'test']
+        self.set_type = {'train':0,'val':1,'test':2}[flag]
+
+        self.train_ratio, self.val_ratio, self.test_ratio = split_ratio
+
+        self.__read_data__()
 
 
-def data_provider(args, flag):
-    Data = data_dict[args.data]
-    timeenc = 0 if args.embed != 'timeF' else 1
 
-    if flag == 'test':
-        shuffle_flag = False
-        drop_last = False  # fix bug
-        batch_size = args.batch_size
-        freq = args.freq
-    elif flag == 'pred':
-        shuffle_flag = False
-        drop_last = False
-        batch_size = 1
-        freq = args.freq
-        Data = Dataset_Pred
-    else:
-        shuffle_flag = True
-        drop_last = True
-        batch_size = args.batch_size
-        freq = args.freq
+    def __read_data__(self):
 
-    data_set = Data(
-        root_path=args.root_path,
-        data_path=args.data_path,
-        flag=flag,
-        size=[args.seq_len, args.label_len, args.pred_len],
-        features=args.features,
-        target=args.target,
-        timeenc=timeenc,
-        freq=freq
-    )
-    print(flag, len(data_set))
-    data_loader = DataLoader(
-        data_set,
-        batch_size=batch_size,
-        shuffle=shuffle_flag,
-        num_workers=args.num_workers,
-        drop_last=drop_last)
-    return data_set, data_loader
+        self.scaler = StandardScaler()
+
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
+
+        cols = list(df_raw.columns)
+
+        if isinstance(self.target, int):
+            target_col = cols[self.target]
+        else:
+            assert self.target in cols
+            target_col = self.target
+
+        cols.remove(target_col)
+        cols.remove('date')
+
+        df_raw = df_raw[['date'] + cols + [target_col]]
+
+        total_len = len(df_raw)
+
+        num_train = int(total_len * self.train_ratio)
+        num_val = int(total_len * self.val_ratio)
+
+        border1s = [
+            0,
+            num_train - self.seq_len,
+            num_train + num_val - self.seq_len
+        ]
+
+        border2s = [
+            num_train,
+            num_train + num_val,
+            total_len
+        ]
+
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+
+        if self.features in ['M','MS']:
+            df_data = df_raw[df_raw.columns[1:]]
+        else:
+            df_data = df_raw[[self.target]]
+
+
+        if self.is_training:
+            train_data = df_data[border1s[0]:border2s[0]]
+            self.scaler.fit(train_data.values)
+            joblib.dump(self.scaler, os.path.join(self.checkpoints_path, "scaler.pkl"))
+
+        else:                    
+            self.scaler = joblib.load(os.path.join(self.checkpoints_path, "scaler.pkl"))
+
+        data = self.scaler.transform(df_data.values)
+
+
+        df_stamp = df_raw[['date']][border1:border2].copy()
+        df_stamp['date'] = pd.to_datetime(df_stamp['date'])
+
+        if self.timeenc == 0:
+
+            df_stamp['month'] = df_stamp.date.dt.month
+            df_stamp['day'] = df_stamp.date.dt.day
+            df_stamp['weekday'] = df_stamp.date.dt.weekday
+            df_stamp['hour'] = df_stamp.date.dt.hour
+
+            if self.freq in ['t','min','minute','s']:
+                df_stamp['minute'] = df_stamp.date.dt.minute
+
+            if self.freq == 's':
+                df_stamp['second'] = df_stamp.date.dt.second
+
+            data_stamp = df_stamp.drop(columns=['date']).values
+
+        else:
+
+            data_stamp = time_features(
+                pd.to_datetime(df_stamp['date'].values),
+                freq=self.freq
+            )
+            data_stamp = data_stamp.transpose(1,0)
+
+        self.data_x = data[border1:border2]
+        self.data_y = data[border1:border2]
+        self.data_stamp = data_stamp
+
+        last_start = max(0, len(self.data_x) - self.seq_len - self.pred_len)
+
+        if last_start < 0:
+            starts = np.array([0])
+        else:
+            starts = np.arange(0, last_start + 1, self.stride)
+
+        # ensure final window reaches dataset end
+        if starts[-1] != last_start:
+            starts = np.append(starts, last_start)       
+
+        s_begin = starts
+        s_end = s_begin + self.seq_len
+
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        self.samples = np.stack([s_begin, s_end, r_begin, r_end], axis=1)
+
+    def __getitem__(self, idx):
+
+        s_begin, s_end, r_begin, r_end = self.samples[idx]
+
+        seq_x = self.data_x[s_begin:s_end]
+        seq_y = self.data_y[r_begin:r_end]
+
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        return len(self.samples)
+    
+    def _data_len(self):
+        return len(self.data_y)
+
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)

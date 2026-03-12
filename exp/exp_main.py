@@ -1,21 +1,22 @@
 from contextlib import nullcontext
 import shutil
+import os
+import time
+#from unittest import loader
+import warnings
+warnings.filterwarnings('ignore')
+
 import numpy as np
 import torch
 import torch.nn as nn
 from torch import optim
 from torch.optim import lr_scheduler
-import os
-import time
-import warnings
-warnings.filterwarnings('ignore')
+from torch.utils.data import DataLoader
 
-from data_provider.data_factory import data_provider
+from data_provider.data_factory import TimeSeriesDataset
 from models import DLinear, ModernTCN, PatchTST, SparseTSF, iTransformer, FrNet
-from utils.tools import EarlyStopping, adjust_learning_rate, visual #test_params_flop
+from utils.tools import EarlyStopping, adjust_learning_rate
 from utils.metrics import metric
-
-from fvcore.nn import FlopCountAnalysis
 
 
 
@@ -28,7 +29,16 @@ class Exp_Main:
     def __init__(self, args):
         self.args = args
         self.device = self._acquire_device()
+
+        if self.args.d_is_training:
+            self.train_loader = self._get_data(flag='train')
+            self.vali_loader = self._get_data(flag='val')
+            self.test_loader = self._get_data(flag='test')
+        else:
+            self.test_loader = self._get_data(flag='test')
+
         self.model = self._build_model().to(self.device)
+
 
     def _acquire_device(self):
         '''
@@ -37,11 +47,11 @@ class Exp_Main:
         specified GPU. If use_multi GPU flag is set, it allows the use of multiple 
         GPUs. If GPU is not available, it sets the device to CPU.
         '''
-        if self.args.use_gpu:
+        if self.args.d_use_gpu:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(
-                self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
-            device = torch.device('cuda:{}'.format(self.args.gpu))
-            print('Use GPU: cuda:{}'.format(self.args.gpu))
+                self.args.d_gpu) if not self.args.d_use_multi_gpu else self.args.d_devices
+            device = torch.device('cuda:{}'.format(self.args.d_gpu))
+            print('Use GPU: cuda:{}'.format(self.args.d_gpu))
         else:
             device = torch.device('cpu')
             print('Use CPU')
@@ -66,24 +76,45 @@ class Exp_Main:
             'FrNet': FrNet,
         }
         
-        model = model_dict[self.args.model].Model(self.args).float()
+        model = model_dict[self.args.d_model].Model(self.args).float()
 
         # If multiple GPUs are to be used and GPU is available, 
         # wrap the model with DataParallel for multi-GPU training.
-        if self.args.use_multi_gpu and self.args.use_gpu:
+        if self.args.d_use_multi_gpu and self.args.d_use_gpu:
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
         
         return model
 
     def _get_data(self, flag):
-        '''
-        Gets the dataset and dataloader for the specified flag (train, val, test)
-        using the data_provider function.
-        '''
-        
-        data_set, data_loader = data_provider(self.args, flag)
+ 
+        timeenc = 0 if self.args.d_embed != 'timeF' else 1
 
-        return data_set, data_loader
+        # Loader configuration
+        flag_list = {
+            "train": {"shuffle": True, "drop_last": True, "stride": self.args.d_stride},
+            "val": {"shuffle": False, "drop_last": False, "stride": self.args.d_pred_len},
+            "test": {"shuffle": False, "drop_last": False, "stride": self.args.d_pred_len},
+                }
+
+        dataset = TimeSeriesDataset(
+            args = self.args,
+            timeenc=timeenc,
+            flag=flag,
+            stride=flag_list[flag]["stride"]
+        )
+
+        print(f"{flag} dataset length: {len(dataset)}")
+
+        loader = DataLoader(
+            dataset,
+            batch_size=self.args.d_batch_size,
+            shuffle=flag_list[flag]["shuffle"],
+            num_workers=self.args.d_num_workers,
+            drop_last=flag_list[flag]["drop_last"],
+            pin_memory=True
+        )
+
+        return loader
 
     def _select_optimizer(self):
         '''
@@ -91,7 +122,7 @@ class Exp_Main:
         with the learning rate specified in the arguments. 
         '''
         
-        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+        model_optim = optim.Adam(self.model.parameters(), lr=self.args.d_learning_rate)
         
         return model_optim
 
@@ -107,7 +138,7 @@ class Exp_Main:
             'mse': nn.MSELoss(),
             'smooth': nn.SmoothL1Loss(),
         }
-        criterion = losses_dict.get(self.args.loss, nn.MSELoss())
+        criterion = losses_dict.get(self.args.d_loss, nn.MSELoss())
         
         return criterion
 
@@ -130,7 +161,7 @@ class Exp_Main:
         
         # For certain datasets like PEMS and Solar, the time features (batch_x_mark and batch_y_mark)
         # are not used, so they are set to None. For other datasets, they are moved to the appropriate device for computation.
-        if 'PEMS' in self.args.data or 'Solar' in self.args.data:
+        if 'PEMS' in self.args.d_data or 'Solar' in self.args.d_data:
             batch_x_mark = None
             batch_y_mark = None
         else:
@@ -140,14 +171,14 @@ class Exp_Main:
         # Decoder input is created by concatenating the known part of the target sequence
         # (label_len) with a zero tensor for the unknown part (pred_len). 
         # This is used as input to the decoder during training and validation.
-        dec_inp = torch.zeros_like(y[:, -self.args.pred_len:, :]).float()
-        dec_inp = torch.cat([y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+        dec_inp = torch.zeros_like(y[:, -self.args.d_pred_len:, :]).float()
+        dec_inp = torch.cat([y[:, :self.args.d_label_len, :], dec_inp], dim=1).float().to(self.device)
 
         return batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp
 
             
 
-    def vali(self, vali_data, vali_loader, criterion):
+    def vali(self, vali_loader, criterion):
         '''
         This method evaluates the model on the validation set. It iterates 
         through the validation dataloader, makes predictions using the model,
@@ -169,9 +200,9 @@ class Exp_Main:
 
                 # Use automatic mixed precision for inference if enabled. 
                 # This can speed up inference on compatible hardware.
-                amp_context = torch.cuda.amp.autocast() if self.args.use_amp else nullcontext()
+                amp_context = torch.cuda.amp.autocast() if self.args.d_use_amp else nullcontext()
 
-                input_type = self.args.model_input_type.lower()
+                input_type = self.args.d_model_input_type.lower()
 
                 if input_type == "x_only":
                     model_args = (batch_x,)
@@ -183,12 +214,12 @@ class Exp_Main:
                 with amp_context:
                     outputs = self.model(*model_args)
                 
-                if input_type not in ["x_only", "x_mark_incl"] and self.args.output_attention:
+                if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
                     outputs = outputs[0]
 
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                f_dim = -1 if self.args.d_features == 'MS' else 0
+                outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
+                batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -210,25 +241,18 @@ class Exp_Main:
         over the training data, makes predictions, calculates the loss, and updates the 
         model parameters.
         '''
-        
-        # Get the training, validation, and test data loaders.
-        train_data, train_loader = self._get_data(flag='train')
-        vali_data, vali_loader = self._get_data(flag='val')
-        test_data, test_loader = self._get_data(flag='test')
 
         # Set up the checkpoint directory for saving the best model during training. The path
         # is constructed using the base checkpoints directory and the specific setting for 
         # this experiment. If the directory does not exist it is created.
-        path = os.path.join(self.args.checkpoints, setting)
-        if not os.path.exists(path):
-            os.makedirs(path)
+        path = os.path.join(self.args.d_checkpoints, self.args.d_setting)
 
         time_now = time.time()
 
         # Calculate the number of training steps per epoch based on the length of the training 
         # data loader.
-        train_steps = len(train_loader)
-        early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
+        train_steps = len(self.train_loader)
+        early_stopping = EarlyStopping(patience=self.args.d_patience, verbose=True)
 
         # Initialize the optimizer, criterion, and learning rate scheduler for training. 
         # The optimizer is selected using the _select_optimizer method, and 
@@ -238,7 +262,7 @@ class Exp_Main:
 
         # If automatic mixed precision is enabled, initialize the GradScaler for scaling 
         # the loss during backpropagation.
-        if self.args.use_amp:
+        if self.args.d_use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
         # Set up the learning rate scheduler. If the learning rate adjustment method is 'TST',
@@ -248,17 +272,17 @@ class Exp_Main:
         # learning rate specified in the arguments.
         scheduler = lr_scheduler.OneCycleLR(optimizer=model_optim,
                                             steps_per_epoch=train_steps,
-                                            pct_start=self.args.pct_start,
-                                            epochs=self.args.train_epochs,
-                                            max_lr=self.args.learning_rate)
+                                            pct_start=self.args.d_pct_start,
+                                            epochs=self.args.d_train_epochs,
+                                            max_lr=self.args.d_learning_rate)
 
-        for epoch in range(self.args.train_epochs):
+        for epoch in range(self.args.d_train_epochs):
             iter_count = 0
             train_loss = []
             self.model.train()
             epoch_time = time.time()
             
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(self.train_loader):
                 iter_count += 1
 
                 # Clear the gradients of the model parameters before backpropagation. This is 
@@ -270,9 +294,9 @@ class Exp_Main:
 
                 # Use automatic mixed precision for inference if enabled. 
                 # This can speed up inference on compatible hardware.
-                amp_context = torch.cuda.amp.autocast() if self.args.use_amp else nullcontext()
+                amp_context = torch.cuda.amp.autocast() if self.args.d_use_amp else nullcontext()
 
-                input_type = self.args.model_input_type.lower()
+                input_type = self.args.d_model_input_type.lower()
 
                 if input_type == "x_only":
                     model_args = (batch_x,)
@@ -284,12 +308,12 @@ class Exp_Main:
                 with amp_context:
                     outputs = self.model(*model_args)
                 
-                if input_type not in ["x_only", "x_mark_incl"] and self.args.output_attention:
+                if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
                     outputs = outputs[0]
 
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                f_dim = -1 if self.args.d_features == 'MS' else 0
+                outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
+                batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
                 loss = criterion(outputs, batch_y)
                 train_loss.append(loss.item())
@@ -300,7 +324,7 @@ class Exp_Main:
                 # in the epoch. The loss for the current batch is also printed.
                 if (i + 1) % 100 == 0:
                     speed = (time.time() - time_now) / iter_count
-                    left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
+                    left_time = speed * ((self.args.d_train_epochs - epoch) * train_steps - i)
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
@@ -312,7 +336,7 @@ class Exp_Main:
                 # gradients, and the scaler is updated after the step.
                 # If automatic mixed precision is not enabled, the loss is backpropagated
                 # and the optimizer step is performed in the standard way.
-                if self.args.use_amp:
+                if self.args.d_use_amp:
                     scaler.scale(loss).backward()
                     scaler.step(model_optim)
                     scaler.update()
@@ -322,16 +346,16 @@ class Exp_Main:
 
                 # Adjust the learning rate using the scheduler. If the learning rate adjustment method is 'TST',
                 # the learning rate is adjusted according to the OneCycleLR scheduler after each batch.
-                if self.args.lradj == 'TST':
+                if self.args.d_lradj == 'TST':
                     adjust_learning_rate(model_optim, scheduler, epoch + 1, self.args, printout=False)
                     scheduler.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
-            vali_loss = self.vali(vali_data, vali_loader, criterion)
-            test_loss = self.vali(test_data, test_loader, criterion)
+            vali_loss = self.vali(self.vali_loader, criterion)
+            test_loss = self.vali(self.test_loader, criterion)
 
-            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
+            print("\nEpoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
             
             # Check for early stopping based on the validation loss. The EarlyStopping class 
@@ -346,7 +370,7 @@ class Exp_Main:
             # Adjust the learning rate using the scheduler if the learning rate adjustment method is not 'TST'.
             # If the method is 'TST', the learning rate is already adjusted after each batch, 
             # so it is not adjusted again here.    
-            if self.args.lradj != 'TST':
+            if self.args.d_lradj != 'TST':
                 adjust_learning_rate(model_optim, scheduler, epoch + 1, self.args)
             else:
                 print('Updating learning rate to {}'.format(scheduler.get_last_lr()[0]))
@@ -367,7 +391,6 @@ class Exp_Main:
         the performance of the model on the test set. The results are saved to a CSV 
         file and optionally plotted and saved as numpy arrays.
         '''
-        test_data, test_loader = self._get_data(flag='test')
 
         if test:
             print('loading model')
@@ -377,11 +400,6 @@ class Exp_Main:
         trues = []
         inputx = []
 
-        if self.args.plot_results:
-            folder_path = './test_results/' + setting + '/'
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
-
         # Inputs for FlopCounts for fvncore
         # profile_x = None
         # profile_x_mark = None
@@ -389,10 +407,10 @@ class Exp_Main:
         # profile_dec_inp = None
 
         self.model.eval()
-        if self.args.call_structural_reparam and hasattr(self.model, 'structural_reparam'):
-            self.model.structural_reparam()
+        #if self.args.d_call_structural_reparam and hasattr(self.model, 'structural_reparam'):
+        #    self.model.structural_reparam()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(self.test_loader):
                 batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = self._get_inputs(batch_x, batch_y, batch_x_mark, batch_y_mark)
 
                 # # Creating profiles for Fvncore
@@ -402,7 +420,7 @@ class Exp_Main:
                 #     profile_y_mark = torch.randn(batch_y_mark.shape).to(self.device)
                 #     profile_dec_inp = torch.randn(dec_inp.shape).to(self.device)
 
-                input_type = self.args.model_input_type.lower()
+                input_type = self.args.d_model_input_type.lower()
 
                 if input_type == "x_only":
                     model_args = (batch_x,)
@@ -417,17 +435,17 @@ class Exp_Main:
                     outputs = outputs[0]
 
 
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                f_dim = -1 if self.args.d_features == 'MS' else 0
+                outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
+                batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
 
-                if test_data.scale and self.args.inverse:
-                    shape = outputs.shape
-                    outputs = test_data.inverse_transform(outputs.squeeze(0)).reshape(shape)
-                    batch_y = test_data.inverse_transform(batch_y.squeeze(0)).reshape(shape)
+                # if self.args.d_inverse:
+                #     shape = outputs.shape
+                #     outputs = test_data.inverse_transform(outputs.squeeze(0)).reshape(shape)
+                #     batch_y = test_data.inverse_transform(batch_y.squeeze(0)).reshape(shape)
                 pred = outputs
                 true = batch_y
 
@@ -435,29 +453,57 @@ class Exp_Main:
                 trues.append(true)
                 inputx.append(batch_x.detach().cpu().numpy())
 
-                # If Plotting Results is enabled: 0=False, 1=True
-                if self.args.plot_results:
-                    if i % 20 == 0:
-                        input = batch_x.detach().cpu().numpy()
-                        if test_data.scale and self.args.inverse:
-                            shape = input.shape
-                            input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
-                        gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                        pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-                        visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+                # # If Plotting Results is enabled: 0=False, 1=True
+                # if self.args.plot_results:
+                #     if i % 20 == 0:
+                #         input = batch_x.detach().cpu().numpy()
+                #         # if test_data.scale and self.args.inverse:
+                #         #     shape = input.shape
+                #         #     input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
+                #         gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
+                #         pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+                #         visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
-        # fixed bug
         preds = np.concatenate(preds, axis=0)
         trues = np.concatenate(trues, axis=0)
-        inputx = np.concatenate(inputx, axis=0)
 
-        preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
-        trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
-        inputx = inputx.reshape(-1, inputx.shape[-2], inputx.shape[-1])
 
+        total_test_len = self.test_loader.dataset._data_len()
+        valid_pred_len = total_test_len - self.args.d_seq_len
+
+        num_windows = preds.shape[0]
+        pred_len = preds.shape[1]
         
+        # flatten all windows except the last
+        flat_preds = preds[:-1].reshape(-1, preds.shape[-1])
+        flat_trues = trues[:-1].reshape(-1, trues.shape[-1])
+        
+        current_len = flat_preds.shape[0]
+        remaining = valid_pred_len - current_len
+
+        if remaining > 0:
+            # need extra values from last window
+            flat_preds = np.concatenate([flat_preds, preds[-1][-remaining:]], axis=0)
+            flat_trues = np.concatenate([flat_trues, trues[-1][-remaining:]], axis=0)
+        elif remaining < 0:
+            # too many values, need to trim tail
+            flat_preds = flat_preds[:valid_pred_len]
+            flat_trues = flat_trues[:valid_pred_len]
+
+
         #Calculate Metrics.
-        mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
+        mae, mse, rmse, mape, mspe, rse, corr = metric(flat_preds, flat_trues)
+
+
+        print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
+        
+
+        with open(f"Result_{self.args.model}.csv", 'a') as f:
+            f.write(f"{setting}mse:{mse}-mae:{mae}\n")
+
+
+        return flat_preds, flat_trues
+    
 
         # #Calculate FLOPS and Params.
         # if self.args.model in ("iTransformer"):
@@ -466,25 +512,18 @@ class Exp_Main:
         #     flops = FlopCountAnalysis(self.model, profile_x).total()
 
         # params = sum(p.numel() for p in self.model.parameters())
-        # print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
+
         # print(f"MACS:{flops}, Params: {params}")
 
-        # Save Metrics, and Params to results file.
-        with open(f"Result_{self.args.model}.csv", 'a') as f:
-            f.write(f"{setting}mse:{mse}-mae:{mae}\n")
+        # if self.args.delete_checkpoints:
+        #     checkpoint_path = os.path.join('./checkpoints/' + setting)
+        #     if os.path.exists(checkpoint_path):
+        #         shutil.rmtree(checkpoint_path)
 
-        # Delete Checkpoints if enabled: 0=False, 1=True
-        if self.args.delete_checkpoints:
-            checkpoint_path = os.path.join('./checkpoints/' + setting)
-            if os.path.exists(checkpoint_path):
-                shutil.rmtree(checkpoint_path)
-
-        # If Saving Results is enabled: 0=False, 1=True
-        if self.args.save_results:
-            folder_path = './results/' + setting + '/'
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
-            np.save(folder_path + 'pred.npy', preds)
-            np.save(folder_path + 'true.npy', trues)
-
-        return
+                # # If Saving Results is enabled: 0=False, 1=True
+        # if self.args.save_results:
+        #     folder_path = './results/' + setting + '/'
+        #     if not os.path.exists(folder_path):
+        #         os.makedirs(folder_path)
+        #     np.save(folder_path + 'pred.npy', preds)
+        #     np.save(folder_path + 'true.npy', trues)

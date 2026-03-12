@@ -5,35 +5,36 @@ import time
 import torch.nn as nn
 import math
 import torch.nn.functional as F
+import os
 
 
 plt.switch_backend('agg')
 
 
 def adjust_learning_rate(optimizer, scheduler, epoch, args, printout=True):
-    # lr = args.learning_rate * (0.2 ** (epoch // 2))
-    if args.lradj == 'type1':
-        lr_adjust = {epoch: args.learning_rate * (0.5 ** ((epoch - 1) // 1))}
-    elif args.lradj == 'type2':
+    # lr = args.d_learning_rate * (0.2 ** (epoch // 2))
+    if args.d_lradj == 'type1':
+        lr_adjust = {epoch: args.d_learning_rate * (0.5 ** ((epoch - 1) // 1))}
+    elif args.d_lradj == 'type2':
         lr_adjust = {
             2: 5e-5, 4: 1e-5, 6: 5e-6, 8: 1e-6,
             10: 5e-7, 15: 1e-7, 20: 5e-8
         }
-    elif args.lradj == 'type3':
-        lr_adjust = {epoch: args.learning_rate if epoch < 3 else args.learning_rate * (0.8 ** ((epoch - 3) // 1))}
-    elif args.lradj == 'constant':
-        lr_adjust = {epoch: args.learning_rate}
-    elif args.lradj == '3':
-        lr_adjust = {epoch: args.learning_rate if epoch < 10 else args.learning_rate*0.1}
-    elif args.lradj == '4':
-        lr_adjust = {epoch: args.learning_rate if epoch < 15 else args.learning_rate*0.1}
-    elif args.lradj == '5':
-        lr_adjust = {epoch: args.learning_rate if epoch < 25 else args.learning_rate*0.1}
-    elif args.lradj == '6':
-        lr_adjust = {epoch: args.learning_rate if epoch < 5 else args.learning_rate*0.1}
-    elif args.lradj == 'type7':
-        lr_adjust = {epoch: max(args.learning_rate * (0.7 ** max((epoch - 4) // 4, 0)), 1e-10)}
-    elif args.lradj == 'TST':
+    elif args.d_lradj == 'type3':
+        lr_adjust = {epoch: args.d_learning_rate if epoch < 3 else args.d_learning_rate * (0.8 ** ((epoch - 3) // 1))}
+    elif args.d_lradj == 'constant':
+        lr_adjust = {epoch: args.d_learning_rate}
+    elif args.d_lradj == '3':
+        lr_adjust = {epoch: args.d_learning_rate if epoch < 10 else args.d_learning_rate*0.1}
+    elif args.d_lradj == '4':
+        lr_adjust = {epoch: args.d_learning_rate if epoch < 15 else args.d_learning_rate*0.1}
+    elif args.d_lradj == '5':
+        lr_adjust = {epoch: args.d_learning_rate if epoch < 25 else args.d_learning_rate*0.1}
+    elif args.d_lradj == '6':
+        lr_adjust = {epoch: args.d_learning_rate if epoch < 5 else args.d_learning_rate*0.1}
+    elif args.d_lradj == 'type7':
+        lr_adjust = {epoch: max(args.d_learning_rate * (0.7 ** max((epoch - 4) // 4, 0)), 1e-10)}
+    elif args.d_lradj == 'TST':
         lr_adjust = {epoch: scheduler.get_last_lr()[0]}
     
     if epoch in lr_adjust.keys():
@@ -50,7 +51,7 @@ class EarlyStopping:
         self.counter = 0
         self.best_score = None
         self.early_stop = False
-        self.val_loss_min = np.Inf
+        self.val_loss_min = np.inf
         self.delta = delta
 
     def __call__(self, val_loss, model, path):
@@ -105,24 +106,40 @@ def visual(true, preds=None, name='./pic/test.pdf'):
     plt.legend()
     plt.savefig(name, bbox_inches='tight')
 
-def test_params_flop(model,x_shape):
+# def test_params_flop(model,x_shape):
+#     """
+#     If you want to thest former's flop, you need to give default value to inputs in model.forward(), the following code can only pass one argument to forward()
+#     """
+#     # model_params = 0
+#     # for parameter in model.parameters():
+#     #     model_params += parameter.numel()
+#     #     print('INFO: Trainable parameter count: {:.2f}M'.format(model_params / 1000000.0))
+#     # from ptflops import get_model_complexity_info
+#     # with torch.cuda.device(0):
+#     #     macs, params = get_model_complexity_info(model.cuda(), x_shape, as_strings=True, print_per_layer_stat=True)
+#     #     # print('Flops:' + flops)
+#     #     # print('Params:' + params)
+#     #     print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
+#     #     print('{:<30}  {:<8}'.format('Number of parameters: ', params))
+#     from ptflops import get_model_complexity_info
+#     with torch.cuda.device(0):
+#         macs, params = get_model_complexity_info(model.cuda(), x_shape, as_strings=True, print_per_layer_stat=False)
+#         print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
+#         print('{:<30}  {:<8}'.format('Number of parameters: ', params))
+#         return macs, params
+    
+def check_and_prepare_dirs(args):
     """
-    If you want to thest former's flop, you need to give default value to inputs in model.forward(), the following code can only pass one argument to forward()
+    Check if required directories exist and create output directories if they don't.
     """
-    # model_params = 0
-    # for parameter in model.parameters():
-    #     model_params += parameter.numel()
-    #     print('INFO: Trainable parameter count: {:.2f}M'.format(model_params / 1000000.0))
-    # from ptflops import get_model_complexity_info
-    # with torch.cuda.device(0):
-    #     macs, params = get_model_complexity_info(model.cuda(), x_shape, as_strings=True, print_per_layer_stat=True)
-    #     # print('Flops:' + flops)
-    #     # print('Params:' + params)
-    #     print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
-    #     print('{:<30}  {:<8}'.format('Number of parameters: ', params))
-    from ptflops import get_model_complexity_info
-    with torch.cuda.device(0):
-        macs, params = get_model_complexity_info(model.cuda(), x_shape, as_strings=True, print_per_layer_stat=False)
-        print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
-        print('{:<30}  {:<8}'.format('Number of parameters: ', params))
-        return macs, params
+
+    output_dirs = {
+        "plots_dir": os.path.join("./plots/", args.d_setting),
+        "checkpoints_dir": f"{args.d_checkpoints}/{args.d_setting}",
+        "results_dir": os.path.join("./results/", args.d_setting),
+    }
+
+    for name, path in output_dirs.items():
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+            print(f"Created directory: {path}")

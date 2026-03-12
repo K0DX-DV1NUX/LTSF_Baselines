@@ -8,7 +8,7 @@ fi
 root_path_name=../dataset/
 
 model_name=DLinear
-train_epochs=100
+train_epochs=5
 patience=20
 num_workers=0
 learning_rate=0.01
@@ -26,7 +26,7 @@ run_experiment () {
     do
         for pred_len in 48 96 192 336 512 720
         do
-            for seq_len in 192 336 512
+            for seq_len in 336 512
             do    
                 python -u run_longExp.py \
                   --is_training 1 \
@@ -38,14 +38,13 @@ run_experiment () {
                   --model $model_name \
                   --data $data_name \
                   --features $features \
-                  --train_type Linear \
+                  --model_input_type 'x_only' \
                   --seq_len $seq_len \
                   --pred_len $pred_len \
                   --enc_in $enc_in \
                   --train_epochs $train_epochs \
                   --patience $patience \
                   --des 'Exp' \
-                  --itr 1 \
                   --batch_size $batch_size \
                   --learning_rate $learning_rate \
                   --lradj $lradj \
@@ -56,6 +55,6 @@ run_experiment () {
 }
 
 run_experiment ETTh1.csv ETTh1 ETTh1 S 1
-run_experiment ETTh2.csv ETTh2 ETTh2 S 1
-run_experiment ETTm1.csv ETTm1 ETTm1 S 1
-run_experiment ETTm2.csv ETTm2 ETTm2 S 1
+#run_experiment ETTh2.csv ETTh2 ETTh2 S 1
+#run_experiment ETTm1.csv ETTm1 ETTm1 S 1
+#run_experiment ETTm2.csv ETTm2 ETTm2 S 1
