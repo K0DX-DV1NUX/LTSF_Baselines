@@ -26,14 +26,14 @@ class TimeSeriesDataset(Dataset):
         self.stride = stride
         self.is_training = args.d_is_training
 
-        self.features = args.d_features
+        self.forecast_type = args.d_forecast_type
         self.target = args.d_target
         self.timeenc = timeenc
         self.freq = args.d_freq
 
         self.root_path = args.d_root_path
         self.data_path = args.d_data_path
-        self.checkpoints_path = f"{args.d_checkpoints}/{args.d_setting}"
+        self.checkpoints_path = os.path.join(args.d_checkpoint_path, args.d_setting)
 
         assert flag in ['train', 'val', 'test']
         self.set_type = {'train':0,'val':1,'test':2}[flag]
@@ -83,10 +83,10 @@ class TimeSeriesDataset(Dataset):
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
-        if self.features in ['M','MS']:
+        if self.forecast_type in ['M','MS']:
             df_data = df_raw[df_raw.columns[1:]]
         else:
-            df_data = df_raw[[self.target]]
+            df_data = df_raw[[target_col]]
 
 
         if self.is_training:
@@ -167,5 +167,5 @@ class TimeSeriesDataset(Dataset):
     def _data_len(self):
         return len(self.data_y)
 
-    def inverse_transform(self, data):
-        return self.scaler.inverse_transform(data)
+    # def inverse_transform(self, data):
+    #     return self.scaler.inverse_transform(data)

@@ -92,9 +92,20 @@ class Exp_Main:
 
         # Loader configuration
         flag_list = {
-            "train": {"shuffle": True, "drop_last": True, "stride": self.args.d_stride},
-            "val": {"shuffle": False, "drop_last": False, "stride": self.args.d_pred_len},
-            "test": {"shuffle": False, "drop_last": False, "stride": self.args.d_pred_len},
+            "train": {"shuffle": True,
+                    "drop_last": True, 
+                    "stride": self.args.d_stride, 
+                    "batch_size": self.args.d_batch_size},
+
+            "val": {"shuffle": False, 
+                    "drop_last": False, 
+                    "stride": self.args.d_pred_len, 
+                    "batch_size": self.args.d_batch_size},
+
+            "test": {"shuffle": False, 
+                     "drop_last": False, 
+                     "stride": self.args.d_pred_len,
+                     "batch_size": 1},
                 }
 
         dataset = TimeSeriesDataset(
@@ -104,11 +115,11 @@ class Exp_Main:
             stride=flag_list[flag]["stride"]
         )
 
-        print(f"{flag} dataset length: {len(dataset)}")
+        print(f"{flag} Dataset: ({len(dataset)}, {self.args.d_seq_len}, {self.args.d_in_features})")
 
         loader = DataLoader(
             dataset,
-            batch_size=self.args.d_batch_size,
+            batch_size=flag_list[flag]["batch_size"],
             shuffle=flag_list[flag]["shuffle"],
             num_workers=self.args.d_num_workers,
             drop_last=flag_list[flag]["drop_last"],
@@ -218,7 +229,7 @@ class Exp_Main:
                 if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
                     outputs = outputs[0]
 
-                f_dim = -1 if self.args.d_features == 'MS' else 0
+                f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
                 outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
@@ -246,7 +257,7 @@ class Exp_Main:
         # Set up the checkpoint directory for saving the best model during training. The path
         # is constructed using the base checkpoints directory and the specific setting for 
         # this experiment. If the directory does not exist it is created.
-        path = os.path.join(self.args.d_checkpoints, self.args.d_setting)
+        path = os.path.join(self.args.d_checkpoint_path, self.args.d_setting)
 
         time_now = time.time()
 
@@ -312,7 +323,7 @@ class Exp_Main:
                 if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
                     outputs = outputs[0]
 
-                f_dim = -1 if self.args.d_features == 'MS' else 0
+                f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
                 outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
@@ -383,7 +394,7 @@ class Exp_Main:
 
         return self.model
 
-    def test(self, setting, test=0):
+    def test(self, setting):
         '''
         This method handles the testing of the model. It first gets the test data loader, 
         and if the test flag is set, it loads the best model from the checkpoint directory. 
@@ -393,13 +404,13 @@ class Exp_Main:
         file and optionally plotted and saved as numpy arrays.
         '''
 
-        if test:
+        if not self.args.d_is_training:
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth'), map_location="cpu"))
 
         preds = []
         trues = []
-        inputx = []
+        #inputx = []
 
         # Inputs for FlopCounts for fvncore
         # profile_x = None
@@ -436,7 +447,7 @@ class Exp_Main:
                     outputs = outputs[0]
 
 
-                f_dim = -1 if self.args.d_features == 'MS' else 0
+                f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
                 outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
@@ -452,7 +463,7 @@ class Exp_Main:
 
                 preds.append(pred)
                 trues.append(true)
-                inputx.append(batch_x.detach().cpu().numpy())
+                #inputx.append(batch_x.detach().cpu().numpy())
 
                 # # If Plotting Results is enabled: 0=False, 1=True
                 # if self.args.plot_results:

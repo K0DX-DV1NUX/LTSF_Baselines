@@ -5,7 +5,8 @@ from exp.exp_main import Exp_Main
 import random
 import numpy as np
 from utils.str2bool import str2bool
-from utils.tools import check_and_prepare_dirs
+from utils.tools import check_and_prepare_dirs, save_results, inverse_transform
+from utils.plotting import plot_results
 
 parser = argparse.ArgumentParser(description='Baseline LTSF Models')
 
@@ -19,34 +20,33 @@ parser = argparse.ArgumentParser(description='Baseline LTSF Models')
 parser.add_argument('--d_seed', type=int, default=2021, help='random seed')
 parser.add_argument('--d_is_training', type=int, required=True, default=1, help='status')
 #parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
-parser.add_argument('--d_plot_results', type=int, default=0, help='whether to plot the results: 0: False, 1: True')
-parser.add_argument('--d_save_results', type=int, default=0, help='whether to save the results: 0: False, 1: True')
-parser.add_argument('--d_delete_checkpoints', type=int, default=1, help='whether to delete ' \
-'the checkpoints after training: 0: False, 1: True')
 
-# data loader
+
+# data configuration
 parser.add_argument('--d_data', type=str, required=False, default='Custom')
 parser.add_argument('--d_root_path', type=str, default='./dataset/', help='root path of the data file')
 parser.add_argument('--d_data_path', type=str, default='ETTh1.csv', help='data file')
-parser.add_argument('--d_features', type=str, default='M',
+parser.add_argument('--d_forecast_type', type=str, default='S',
                     help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate,' \
                     ' S:univariate predict univariate, MS:multivariate predict univariate')
-parser.add_argument('--d_target', type=str, default='OT', help='target feature in S or MS task')
+parser.add_argument('--d_target', type=str, default=-1, help='target feature in S or MS task')
 parser.add_argument('--d_embed', type=str, default='timeF',
                      help='time features encoding, options:[timeF, fixed, learned]')
 parser.add_argument('--d_freq', type=str, default='h',
                     help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, ' \
                     'd:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
-parser.add_argument('--d_checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
+parser.add_argument('--d_checkpoint_path', type=str, default='./checkpoints/', help='location of model checkpoints')
 parser.add_argument('--d_stride', type=int, default=10)
+parser.add_argument('--d_inverse_transform', type=int, help='inverse output data', default=0)
 
-# forecasting task
+# model name and forecasting details
 parser.add_argument('--d_model', type=str, required=True, default='DLinear', help='model name')
 parser.add_argument('--d_model_input_type', type=str, required=True, default="x_only")
 parser.add_argument('--d_seq_len', type=int, default=96, help='input sequence length')
-parser.add_argument('--d_label_len', type=int, default=48, help='start token length')
+parser.add_argument('--d_label_len', type=int, default=48, help='start token length for decoder if being used')
 parser.add_argument('--d_pred_len', type=int, default=96, help='prediction sequence length')
-parser.add_argument('--d_enc_in', type=int, default=7, help='encoder input size')
+parser.add_argument('--d_in_features', type=int, default=7, help='number of features or variates')
+parser.add_argument('--d_out_features', type=int, default=7, help='number of features or variates')
 
 # DLinear
 #parser.add_argument('--individual', type=int, default=0, help='individual head; True 1 False 0') # Used by PatchTST too.
@@ -72,7 +72,7 @@ parser.add_argument('--d_enc_in', type=int, default=7, help='encoder input size'
 # parser.add_argument('--exp_name', type=str, required=False, default='MTSF',
 #                     help='experiemnt name, options:[MTSF, partial_train]')
 # parser.add_argument('--channel_independence', type=bool, default=False, help='whether to use channel_independence mechanism')
-parser.add_argument('--d_inverse', action='store_true', help='inverse output data', default=False)
+
 # parser.add_argument('--class_strategy', type=str, default='projection', help='projection/average/cls_token')
 # parser.add_argument('--target_root_path', type=str, default='./data/electricity/', help='root path of the data file')
 # parser.add_argument('--target_data_path', type=str, default='electricity.csv', help='data file')
@@ -101,7 +101,7 @@ parser.add_argument('--d_inverse', action='store_true', help='inverse output dat
 # parser.add_argument('--dims', nargs='+',type=int, default=[256,256,256,256], help='dmodels in each stage')
 # parser.add_argument('--dw_dims', nargs='+',type=int, default=[256,256,256,256])
 # parser.add_argument('--small_kernel_merged', type=str2bool, default=False, help='small_kernel has already merged or not')
-parser.add_argument('--d_call_structural_reparam', type=bool, default=False, help='structural_reparam after training')
+# parser.add_argument('--d_call_structural_reparam', type=bool, default=False, help='structural_reparam after training')
 # parser.add_argument('--use_multi_scale', type=str2bool, default=True, help='use_multi_scale fusion')
 
 
@@ -187,10 +187,10 @@ if args.d_use_gpu and args.d_use_multi_gpu:
 print('Args in experiment:')
 print(args)
 
-setting = '{}-{}-ft{}-sl{}-pl{}-seed{}-'.format(
+setting = '{}-{}-ft{}-sl{}-pl{}-seed{}'.format(
     args.d_model,
     args.d_data,
-    args.d_features,
+    args.d_forecast_type,
     args.d_seq_len,
     args.d_pred_len,
     args.d_seed)
@@ -203,20 +203,18 @@ check_and_prepare_dirs(args)
 exp = Exp_Main(args)
 
 # Run the experiment. 
-
-
-# If --is_training is 1, it will train and test the model.
 if args.d_is_training:
         print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(args.d_setting))
         exp.train(setting)
 
-        print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.d_setting))
-        preds, trues = exp.test(setting)
-        torch.cuda.empty_cache()
+print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.d_setting))
+preds, trues = exp.test(args.d_setting)
 
-# If --is_training is 0, it will only test the model.
-# Ensure, checkpoint path contains both model.pth and standardization values.pkl
-else:
-    print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.d_setting))
-    preds, trues = exp.test(args.d_setting, test=1)
-    torch.cuda.empty_cache()
+if args.d_inverse_transform:
+     preds = inverse_transform(args, preds)
+     trues = inverse_transform(args, trues)
+
+save_results(args, preds, trues)
+plot_results(args, preds, trues, zoom_to=400)
+
+torch.cuda.empty_cache()

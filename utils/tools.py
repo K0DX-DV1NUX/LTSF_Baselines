@@ -1,11 +1,7 @@
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
-import time
-import torch.nn as nn
-import math
-import torch.nn.functional as F
 import os
+import joblib
 
 
 class EarlyStopping:
@@ -40,45 +36,14 @@ class EarlyStopping:
         self.val_loss_min = val_loss
 
 
-# class dotdict(dict):
-#     """dot.notation access to dictionary attributes"""
-#     __getattr__ = dict.get
-#     __setattr__ = dict.__setitem__
-#     __delattr__ = dict.__delitem__
-
-
-# class StandardScaler():
-#     def __init__(self, mean, std):
-#         self.mean = mean
-#         self.std = std
-
-#     def transform(self, data):
-#         return (data - self.mean) / self.std
-
-#     def inverse_transform(self, data):
-#         return (data * self.std) + self.mean
-
-
-# def visual(true, preds=None, name='./pic/test.pdf'):
-#     """
-#     Results visualization
-#     """
-#     plt.figure()
-#     plt.plot(true, label='GroundTruth', linewidth=2)
-#     if preds is not None:
-#         plt.plot(preds, label='Prediction', linewidth=2)
-#     plt.legend()
-#     plt.savefig(name, bbox_inches='tight')
-
     
 def check_and_prepare_dirs(args):
     """
     Check if required directories exist and create output directories if they don't.
     """
-
     output_dirs = {
         "plots_dir": os.path.join("./plots/", args.d_setting),
-        "checkpoints_dir": f"{args.d_checkpoints}/{args.d_setting}",
+        "checkpoints_dir": os.path.join(args.d_checkpoint_path, args.d_setting),
         "results_dir": os.path.join("./results/", args.d_setting),
     }
 
@@ -87,24 +52,11 @@ def check_and_prepare_dirs(args):
             os.makedirs(path, exist_ok=True)
             print(f"Created directory: {path}")
 
-# def test_params_flop(model,x_shape):
-#     """
-#     If you want to thest former's flop, you need to give default value to inputs in model.forward(), the following code can only pass one argument to forward()
-#     """
-#     # model_params = 0
-#     # for parameter in model.parameters():
-#     #     model_params += parameter.numel()
-#     #     print('INFO: Trainable parameter count: {:.2f}M'.format(model_params / 1000000.0))
-#     # from ptflops import get_model_complexity_info
-#     # with torch.cuda.device(0):
-#     #     macs, params = get_model_complexity_info(model.cuda(), x_shape, as_strings=True, print_per_layer_stat=True)
-#     #     # print('Flops:' + flops)
-#     #     # print('Params:' + params)
-#     #     print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
-#     #     print('{:<30}  {:<8}'.format('Number of parameters: ', params))
-#     from ptflops import get_model_complexity_info
-#     with torch.cuda.device(0):
-#         macs, params = get_model_complexity_info(model.cuda(), x_shape, as_strings=True, print_per_layer_stat=False)
-#         print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
-#         print('{:<30}  {:<8}'.format('Number of parameters: ', params))
-#         return macs, params
+
+def save_results(args, preds, trues):
+    np.save(os.path.join("./results/", args.d_setting, "preds.npy"), preds)
+    np.save(os.path.join("./results/", args.d_setting, "trues.npy"), trues)
+
+def inverse_transform(args, data):
+        scaler = joblib.load(os.path.join(args.d_checkpoint_path, args.d_setting, "scaler.pkl"))
+        return scaler.inverse_transform(data)
