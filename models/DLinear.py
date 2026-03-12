@@ -49,7 +49,7 @@ class Model(nn.Module):
         kernel_size = 25
         self.decompsition = series_decomp(kernel_size)
         self.individual = configs.m_individual
-        self.channels = configs.d_enc_in
+        self.channels = configs.d_in_features
 
         if self.individual:
             self.Linear_Seasonal = nn.ModuleList()
