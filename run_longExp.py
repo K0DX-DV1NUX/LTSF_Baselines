@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser(description='Baseline LTSF Models')
 # setup forecasting, optimization and gpu settings.
 # 
 # Use "--m_" to set arguments for your own model, which will be captured automatically.
-# This will allow different models to use same arguments, without altercation.
+# This will allow different models to use same arguments if needed, without altercation.
 
 # basic config
 parser.add_argument('--d_seed', type=int, default=2021, help='random seed')
@@ -153,9 +153,26 @@ if len(unknown) % 2 != 0:
     raise ValueError("Unknown arguments must appear as '--key value' pairs.")
 
 extra_args = {}
+
+def parse_value(v):
+    # try integer
+    try:
+        return int(v)
+    except ValueError:
+        pass
+
+    # try float
+    try:
+        return float(v)
+    except ValueError:
+        pass
+
+    # otherwise keep as string
+    return v
+
 for i in range(0, len(unknown), 2):
     key = unknown[i].lstrip('-')
-    value = unknown[i + 1]
+    value = parse_value(unknown[i + 1])
     extra_args[key] = value
 
 for k, v in extra_args.items():
