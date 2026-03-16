@@ -20,30 +20,30 @@ class Model(nn.Module):
         super().__init__()
         
         # load parameters
-        c_in = configs.enc_in
-        context_window = configs.seq_len
-        target_window = configs.pred_len
+        c_in = configs.d_in_features
+        context_window = configs.d_seq_len
+        target_window = configs.d_pred_len
         
-        n_layers = configs.e_layers
-        n_heads = configs.n_heads
-        d_model = configs.d_model
-        d_ff = configs.d_ff
-        dropout = configs.dropout
-        fc_dropout = configs.fc_dropout
-        head_dropout = configs.head_dropout
+        n_layers = configs.m_e_layers
+        n_heads = configs.m_n_heads
+        d_model = configs.m_d_model
+        d_ff = configs.m_d_ff
+        dropout = configs.m_dropout
+        fc_dropout = configs.m_fc_dropout
+        head_dropout = configs.m_head_dropout
         
-        individual = configs.individual
+        individual = configs.m_individual
     
-        patch_len = configs.patch_len
-        stride = configs.stride
-        padding_patch = configs.padding_patch
+        patch_len = configs.m_patch_len
+        stride = configs.m_stride
+        padding_patch = configs.m_padding_patch
         
-        revin = configs.revin
-        affine = configs.affine
-        subtract_last = configs.subtract_last
+        revin = configs.m_revin
+        affine = configs.m_affine
+        subtract_last = configs.m_subtract_last
         
-        decomposition = configs.decomposition
-        kernel_size = configs.kernel_size
+        decomposition = configs.m_decomposition
+        kernel_size = configs.m_kernel_size
         
         
         # model
