@@ -1,19 +1,15 @@
 #!/bin/sh
 
-if [ ! -d "./logs" ]; then
-    mkdir ./logs
-fi
-
 # Default settings being used across all scripts.
 root_path_name=../dataset/
 train_epochs=100
 patience=20
 learning_rate=0.001
 batch_size=512
-stride=1
+stride=5
 lradj=type7
 inverse_transform=0
-num_workers=0
+num_workers=10
 
 # Model specific settings.
 model_name=DLinear
@@ -62,3 +58,6 @@ run_experiment ETTh1.csv ETTh1 ETTh1 M 7
 run_experiment ETTh2.csv ETTh2 ETTh2 M 7
 run_experiment ETTm1.csv ETTm1 ETTm1 M 7
 run_experiment ETTm2.csv ETTm2 ETTm2 M 7
+run_experiment weather.csv Weather WTH M 21
+run_experiment electricity.csv Electricity ELT M 321
+run_experiment traffic.csv Traffic TRF M 862
