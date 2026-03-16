@@ -180,3 +180,5 @@ results/
 Result*.csv
 
 *.ipynb
+
+plots/
