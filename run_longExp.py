@@ -6,7 +6,7 @@ import random
 import numpy as np
 from utils.str2bool import str2bool
 from utils.tools import check_and_prepare_dirs, save_results, inverse_transform
-from utils.plotting import plot_results
+#from utils.plotting import plot_results
 
 parser = argparse.ArgumentParser(description='Baseline LTSF Models')
 
@@ -47,6 +47,9 @@ parser.add_argument('--d_label_len', type=int, default=48, help='start token len
 parser.add_argument('--d_pred_len', type=int, default=96, help='prediction sequence length')
 parser.add_argument('--d_in_features', type=int, default=7, help='number of features or variates')
 parser.add_argument('--d_out_features', type=int, default=7, help='number of features or variates')
+
+#
+parser.add_argument('--d_output_attention', type=bool, default=False)
 
 # DLinear
 #parser.add_argument('--individual', type=int, default=0, help='individual head; True 1 False 0') # Used by PatchTST too.
@@ -149,12 +152,39 @@ parser.add_argument('--d_test_flop', action='store_true', default=False, help='S
 
 args, unknown = parser.parse_known_args()
 
-if len(unknown) % 2 != 0:
-    raise ValueError("Unknown arguments must appear as '--key value' pairs.")
+# --------------------------------
+# Evaluate and raise error if unkown arguments are not in pairs.
+# --------------------------------
+for i in range(0, len(unknown), 2):
+    key = unknown[i]
 
+    # check key format
+    if not key.startswith("--"):
+        raise ValueError(
+            f"Invalid key '{key}'. Expected format '--key value'."
+        )
+
+    # check value exists
+    if i + 1 >= len(unknown):
+        raise ValueError(
+            f"Missing value for argument '{key}'."
+        )
+
+# --------------------------------
+# Add the unkown arguments into known args dictionary.
+# --------------------------------
 extra_args = {}
 
+# Function to convert the unkown arguments into bool, int, float or str.
 def parse_value(v):
+    v_lower = v.lower()
+
+    # handle boolean
+    if v_lower == "true":
+        return True
+    if v_lower == "false":
+        return False
+
     # try integer
     try:
         return int(v)
@@ -167,9 +197,10 @@ def parse_value(v):
     except ValueError:
         pass
 
-    # otherwise keep as string
+    # fallback to string
     return v
 
+# Add extra arguments into args dictionary.
 for i in range(0, len(unknown), 2):
     key = unknown[i].lstrip('-')
     value = parse_value(unknown[i + 1])
@@ -179,17 +210,18 @@ for k, v in extra_args.items():
     setattr(args, k, v)
      
 
-# Fix random seeds for reproducibility. 
-# Note that for some models, even with fixed seeds, 
-# there may still be some randomness due to non-deterministic 
-# operations in PyTorch or other libraries.
+# --------------------------------
+# Set the seed value.
+# --------------------------------
 fix_seed = args.d_seed
 random.seed(fix_seed)
 torch.manual_seed(fix_seed)
 np.random.seed(fix_seed)
 
 
-# GPU settings
+# --------------------------------
+# Set the GPU settings.
+# --------------------------------
 args.d_use_gpu = True if torch.cuda.is_available() and args.d_use_gpu else False
 
 # If using multiple GPUs, set up the device ids and the primary gpu.
@@ -199,8 +231,10 @@ if args.d_use_gpu and args.d_use_multi_gpu:
     args.d_device_ids = [int(id_) for id_ in device_ids]
     args.d_gpu = args.device_ids[0]
 
+# --------------------------------
 # Print the arguments for the experiment. 
 # This is useful for logging and reproducibility.
+# --------------------------------
 print('Args in experiment:')
 print(args)
 
@@ -214,12 +248,17 @@ setting = '{}-{}-ft{}-sl{}-pl{}-seed{}'.format(
 
 args.d_setting = setting
 
+# --------------------------------
+# Prepare directories.
+# --------------------------------
 check_and_prepare_dirs(args)
 
-
+# --------------------------------
+# RUN EXPERIMENT.
+# --------------------------------
 exp = Exp_Main(args)
 
-# Run the experiment. 
+# If training is enabled.
 if args.d_is_training:
         print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(args.d_setting))
         exp.train(setting)
@@ -227,11 +266,15 @@ if args.d_is_training:
 print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.d_setting))
 preds, trues = exp.test(args.d_setting)
 
+# If output needs to be inverse transformed.
 if args.d_inverse_transform:
      preds = inverse_transform(args, preds)
      trues = inverse_transform(args, trues)
 
+# --------------------------------
+# Save and plot results.
+# --------------------------------
 save_results(args, preds, trues)
-plot_results(args, preds, trues, zoom_to=400)
+#plot_results(args, preds, trues, zoom_to=400)
 
 torch.cuda.empty_cache()

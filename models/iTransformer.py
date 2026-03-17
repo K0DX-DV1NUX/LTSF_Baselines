@@ -14,30 +14,30 @@ class Model(nn.Module):
 
     def __init__(self, configs):
         super(Model, self).__init__()
-        self.seq_len = configs.seq_len
-        self.pred_len = configs.pred_len
-        self.output_attention = configs.output_attention
-        self.use_norm = configs.use_norm
+        self.seq_len = configs.d_seq_len
+        self.pred_len = configs.d_pred_len
+        self.output_attention = configs.d_output_attention
+        self.use_norm = configs.m_use_norm
         # Embedding
-        self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.embed, configs.freq,
-                                                    configs.dropout)
-        self.class_strategy = configs.class_strategy
+        self.enc_embedding = DataEmbedding_inverted(configs.d_seq_len, configs.m_d_model, configs.m_embed, configs.d_freq,
+                                                    configs.m_dropout)
+        self.class_strategy = configs.m_class_strategy
         # Encoder-only architecture
         self.encoder = Encoder(
             [
                 EncoderLayer(
                     AttentionLayer(
-                        FullAttention(False, configs.factor, attention_dropout=configs.dropout,
-                                      output_attention=configs.output_attention), configs.d_model, configs.n_heads),
-                    configs.d_model,
-                    configs.d_ff,
-                    dropout=configs.dropout,
-                    activation=configs.activation
-                ) for l in range(configs.e_layers)
+                        FullAttention(False, configs.m_factor, attention_dropout=configs.m_dropout,
+                                      output_attention=configs.d_output_attention), configs.m_d_model, configs.m_n_heads),
+                    configs.m_d_model,
+                    configs.m_d_ff,
+                    dropout=configs.m_dropout,
+                    activation=configs.m_activation
+                ) for l in range(configs.m_e_layers)
             ],
-            norm_layer=torch.nn.LayerNorm(configs.d_model)
+            norm_layer=torch.nn.LayerNorm(configs.m_d_model)
         )
-        self.projector = nn.Linear(configs.d_model, configs.pred_len, bias=True)
+        self.projector = nn.Linear(configs.m_d_model, configs.d_pred_len, bias=True)
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         if self.use_norm:
