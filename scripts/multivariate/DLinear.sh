@@ -14,7 +14,6 @@ num_workers=10
 # Model specific settings.
 model_name=DLinear
 model_input_type="x_only"
-individual=1
 
 run_experiment () {
     data_path_name=$1
@@ -48,7 +47,7 @@ run_experiment () {
                 --d_lradj $lradj \
                 --d_num_workers $num_workers \
                 --d_model $model_name \
-                --m_individual $individual
+                --m_individual 1
             done
         done
     done
