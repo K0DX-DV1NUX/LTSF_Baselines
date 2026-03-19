@@ -37,7 +37,7 @@ parser.add_argument('--d_freq', type=str, default='h',
                     'd:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
 parser.add_argument('--d_checkpoint_path', type=str, default='./checkpoints/', help='location of model checkpoints')
 parser.add_argument('--d_stride', type=int, default=10)
-parser.add_argument('--d_inverse_transform', type=int, help='inverse output data', default=0)
+parser.add_argument('--d_inverse_transform', action="store_true", default=False)
 
 # model name and forecasting details
 parser.add_argument('--d_model', type=str, required=True, default='DLinear', help='model name')
@@ -49,7 +49,7 @@ parser.add_argument('--d_in_features', type=int, default=7, help='number of feat
 parser.add_argument('--d_out_features', type=int, default=7, help='number of features or variates')
 
 #
-parser.add_argument('--d_output_attention', type=bool, default=False)
+parser.add_argument('--d_output_attention', action='store_true', default=False)
 
 # DLinear
 #parser.add_argument('--individual', type=int, default=0, help='individual head; True 1 False 0') # Used by PatchTST too.
@@ -88,7 +88,7 @@ parser.add_argument('--d_output_attention', type=bool, default=False)
 # parser.add_argument('--aggregation_type', type=str, default='linear', help='linear or avg')
 # parser.add_argument('--channel_attention', type=int, default=0, help='True 1 or False 0')
 # parser.add_argument('--global_freq_pred', type=int, default=1, help='True 1 or False 0')
-# parser.add_argument('--period_list', type=int, nargs='+', default=1, help='period_list') 
+parser.add_argument('--m_period_list', type=int, nargs='+', default=1, help='period_list') 
 # parser.add_argument('--emb', type=int, default=64, help='patch embedding size')
 
 
@@ -144,11 +144,11 @@ parser.add_argument('--d_pct_start', type=float, default=0.3, help='pct_start')
 parser.add_argument('--d_use_amp', action='store_true', help='use automatic mixed precision training', default=False)
 
 # GPU
-parser.add_argument('--d_use_gpu', type=bool, default=True, help='use gpu')
+parser.add_argument('--d_use_gpu', action="store_true", default=False, help='use gpu')
 parser.add_argument('--d_gpu', type=int, default=0, help='gpu')
 parser.add_argument('--d_use_multi_gpu', action='store_true', help='use multiple gpus', default=False)
 parser.add_argument('--d_devices', type=str, default='0,1,2,3', help='device ids of multile gpus')
-parser.add_argument('--d_test_flop', action='store_true', default=False, help='See utils/tools for usage')
+#parser.add_argument('--d_test_flop', action='store_true', default=False, help='See utils/tools for usage')
 
 args, unknown = parser.parse_known_args()
 
