@@ -2,14 +2,13 @@
 
 # Default settings being used across all scripts.
 root_path_name=../dataset/
-train_epochs=100
+train_epochs=1
 patience=20
 learning_rate=0.001
-batch_size=512
 stride=5
 lradj=type7
 inverse_transform=0
-num_workers=10
+num_workers=0
 
 # Model specific settings.
 model_name=iTransformer
@@ -22,6 +21,7 @@ run_experiment () {
     forecast_type=$4
     in_features=$5
     d_freq=$6
+    batch_size=$7
 
     for seed in $(seq 2021 2025)
     do
@@ -56,7 +56,6 @@ run_experiment () {
                 --d_lradj $lradj \
                 --d_num_workers $num_workers \
                 --d_model $model_name \
-                --d_output_attention False \
                 --m_d_model $m_d_model \
                 --m_use_norm True \
                 --m_embed timeF \
@@ -72,13 +71,13 @@ run_experiment () {
     done
 }
 
-run_experiment ETTh1.csv ETTh1 ETTh1 M 7 h
-run_experiment ETTh2.csv ETTh2 ETTh2 M 7 h
-run_experiment ETTm1.csv ETTm1 ETTm1 M 7 m
-run_experiment ETTm2.csv ETTm2 ETTm2 M 7 m
-run_experiment weather.csv Weather WTH M 21 m
-run_experiment electricity.csv Electricity ELT M 321 m
-run_experiment traffic.csv Traffic TRF M 862 h
+run_experiment ETTh1.csv ETTh1 ETTh1 M 7 h 512
+run_experiment ETTh2.csv ETTh2 ETTh2 M 7 h 512
+run_experiment ETTm1.csv ETTm1 ETTm1 M 7 m 512
+run_experiment ETTm2.csv ETTm2 ETTm2 M 7 m 512
+run_experiment weather.csv Weather WTH M 21 m 512
+run_experiment electricity.csv Electricity ELT M 321 m 32
+run_experiment traffic.csv Traffic TRF M 862 h 32
 
 
 
