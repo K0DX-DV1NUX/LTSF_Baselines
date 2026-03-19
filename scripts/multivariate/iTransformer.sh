@@ -2,13 +2,13 @@
 
 # Default settings being used across all scripts.
 root_path_name=../dataset/
-train_epochs=1
+train_epochs=100
 patience=20
 learning_rate=0.001
 stride=5
 lradj=type7
 inverse_transform=0
-num_workers=0
+num_workers=10
 
 # Model specific settings.
 model_name=iTransformer
