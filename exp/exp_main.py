@@ -443,7 +443,7 @@ class Exp_Main:
                 
                 outputs = self.model(*model_args)
 
-                if input_type not in ["x_only", "x_mark_incl"] and self.args.output_attention:
+                if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
                     outputs = outputs[0]
 
 
