@@ -5,7 +5,6 @@ root_path_name=../dataset/
 train_epochs=100
 patience=20
 learning_rate=0.001
-batch_size=512
 stride=5
 lradj=type7
 inverse_transform=0
@@ -21,6 +20,7 @@ run_experiment () {
     data_name=$3
     forecast_type=$4
     in_features=$5
+    batch_size=$6
 
     for seed in $(seq 2021 2025)
     do
@@ -68,10 +68,10 @@ run_experiment () {
     done
 }
 
-run_experiment ETTh1.csv ETTh1 ETTh1 M 7
-run_experiment ETTh2.csv ETTh2 ETTh2 M 7
-run_experiment ETTm1.csv ETTm1 ETTm1 M 7
-run_experiment ETTm2.csv ETTm2 ETTm2 M 7
-run_experiment weather.csv Weather WTH M 21
-run_experiment electricity.csv Electricity ELT M 321
-run_experiment traffic.csv Traffic TRF M 862
+#run_experiment ETTh1.csv ETTh1 ETTh1 M 7 512
+#run_experiment ETTh2.csv ETTh2 ETTh2 M 7 512
+#run_experiment ETTm1.csv ETTm1 ETTm1 M 7 512
+#run_experiment ETTm2.csv ETTm2 ETTm2 M 7 512
+#run_experiment weather.csv Weather WTH M 21 512
+run_experiment electricity.csv Electricity ELT M 321 32
+run_experiment traffic.csv Traffic TRF M 862 32
