@@ -19,8 +19,8 @@ d_data = "ELT"
 d_data_path = "electricity.csv"
 d_freq = "min"
 d_forecast_type = "M"
-d_in_features = 21
-d_out_features = 21
+d_in_features = 321
+d_out_features = 321
 d_inverse_transform = false
 
 # Model Information.

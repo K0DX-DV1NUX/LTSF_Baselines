@@ -19,8 +19,8 @@ d_data = "TRF"
 d_data_path = "traffic.csv"
 d_freq = "h"
 d_forecast_type = "M"
-d_in_features = 21
-d_out_features = 21
+d_in_features = 862
+d_out_features = 862
 d_inverse_transform = false
 
 # Model Information.
