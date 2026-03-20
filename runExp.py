@@ -12,14 +12,22 @@ from utils.tools import check_and_prepare_dirs, save_results, inverse_transform
 
 
 parser = argparse.ArgumentParser(description="LTSF Runner")
-parser.add_argument("--config",type=str,required=True, help="Path to experiment TOML config")
+parser.add_argument("--data_config",type=str,required=True, help="Path to experiment TOML config for dataset.")
+parser.add_argument("--gpu_config", type=str, required=True, help="Path to experiment TOML config for gpu settings.")
+parser.add_argument("--model_config", type=str, required=True, help="Path to experiment TOML config for model settings.")
 args = parser.parse_args()
 
 # -------------------------
 # Load Running Configurations.
 # -------------------------
-with open(args.config, "rb") as f:
-    values = tomllib.load(f)
+def load_toml(path):
+    with open(path, "rb") as f:
+        configs = tomllib.load(f)
+    return configs
+
+data_values = load_toml(args.data_config)
+gpu_values = load_toml(args.gpu_config)
+model_values = load_toml(args.model_config)
 
 
 # -------------------------
@@ -27,8 +35,8 @@ with open(args.config, "rb") as f:
 # Seed Values = 2021, 2022, 2023, 2024, 2025
 # 
 # -------------------------
-for d_seed in range(2021, 2025):
-    for run in values["runs"]:
+for d_seed in range(2021, 2022):
+    for run in model_values["runs"]:
 
         # -------------------------
         # Merged will allow to overide "default" settings, by settings in "runs".
@@ -36,8 +44,9 @@ for d_seed in range(2021, 2025):
         # merged.d_batch_size=32.
         # -------------------------
         merged = {
-             **values['default'], 
-            **values.get('gpu',{}),
+            **data_values['default'], 
+            **gpu_values.get('gpu',{}),
+            **model_values['default'],
             **run,
         }
         cfgs = ExpConfig(**merged)

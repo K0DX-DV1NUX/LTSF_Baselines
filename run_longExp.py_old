@@ -8,7 +8,15 @@ from utils.str2bool import str2bool
 from utils.tools import check_and_prepare_dirs, save_results, inverse_transform
 #from utils.plotting import plot_results
 
+
+from pydantic import BaseModel, Field
+from typing import Literal
+
+
 parser = argparse.ArgumentParser(description='Baseline LTSF Models')
+
+parser.add_argument('--d_seed', type=int, default=2021, help='random seed')
+parser.add_argument('--d_is_training', type=int, required=True, default=1, help='status')
 
 # Arguments that start as "--d_" are DEFAULT arguments to build and load datasets,
 # setup forecasting, optimization and gpu settings.
@@ -17,18 +25,18 @@ parser = argparse.ArgumentParser(description='Baseline LTSF Models')
 # This will allow different models to use same arguments if needed, without altercation.
 
 # basic config
-parser.add_argument('--d_seed', type=int, default=2021, help='random seed')
-parser.add_argument('--d_is_training', type=int, required=True, default=1, help='status')
+#parser.add_argument('--d_seed', type=int, default=2021, help='random seed')
+
 #parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
 
 
 # data configuration
-parser.add_argument('--d_data', type=str, required=False, default='Custom')
-parser.add_argument('--d_root_path', type=str, default='./dataset/', help='root path of the data file')
-parser.add_argument('--d_data_path', type=str, default='ETTh1.csv', help='data file')
-parser.add_argument('--d_forecast_type', type=str, default='S',
-                    help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate,' \
-                    ' S:univariate predict univariate, MS:multivariate predict univariate')
+# parser.add_argument('--d_data', type=str, required=False, default='Custom')
+# parser.add_argument('--d_root_path', type=str, default='./dataset/', help='root path of the data file')
+# parser.add_argument('--d_data_path', type=str, default='ETTh1.csv', help='data file')
+# parser.add_argument('--d_forecast_type', type=str, default='S',
+#                     help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate,' \
+#                     ' S:univariate predict univariate, MS:multivariate predict univariate')
 parser.add_argument('--d_target', type=str, default=-1, help='target feature in S or MS task')
 parser.add_argument('--d_embed', type=str, default='timeF',
                      help='time features encoding, options:[timeF, fixed, learned]')
