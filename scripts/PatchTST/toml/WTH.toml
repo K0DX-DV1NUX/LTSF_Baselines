@@ -4,7 +4,7 @@
 [default]
 # Training
 d_is_training = 1
-d_train_epochs = 1
+d_train_epochs = 100
 d_patience = 20
 d_learning_rate = 0.001
 d_batch_size = 512

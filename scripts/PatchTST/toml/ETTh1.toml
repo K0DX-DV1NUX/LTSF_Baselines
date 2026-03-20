@@ -4,7 +4,7 @@
 [default]
 # Training
 d_is_training = 1
-d_train_epochs = 1
+d_train_epochs = 100
 d_patience = 20
 d_learning_rate = 0.001
 d_batch_size = 512
@@ -17,9 +17,9 @@ d_root_path = "../dataset"
 d_data = "ETTh1"
 d_data_path = "ETTh1.csv"
 d_freq = "h"
-d_forecast_type = "M"
-d_in_features = 7
-d_out_features = 7
+d_forecast_type = "S"
+d_in_features = 1
+d_out_features = 1
 d_inverse_transform = false
 
 # Model
