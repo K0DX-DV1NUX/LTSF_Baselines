@@ -71,6 +71,10 @@ class Model(nn.Module):
 
     def forward(self, x):
         # x: [Batch, Input length, Channel]
+
+        if self.channels != x.shape[-1]:
+            raise ValueError("Model Configuration does not match the dataset.")
+
         seasonal_init, trend_init = self.decompsition(x)
         seasonal_init, trend_init = seasonal_init.permute(0,2,1), trend_init.permute(0,2,1)
         if self.individual:
