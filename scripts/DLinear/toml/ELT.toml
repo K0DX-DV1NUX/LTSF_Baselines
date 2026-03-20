@@ -1,0 +1,72 @@
+# -------------------------
+# Defaults (shared settings)
+# -------------------------
+[default]
+# Training Information.
+d_is_training = 1
+d_train_epochs = 100
+d_patience = 20
+d_learning_rate = 0.001
+d_batch_size = 32
+d_stride = 5
+d_lradj = "type7"
+d_num_workers = 10
+
+# Data Information.
+d_root_path = "../dataset"
+d_checkpoint_path = "../checkpoints"
+d_data = "ELT"
+d_data_path = "electricity.csv"
+d_freq = "min"
+d_forecast_type = "M"
+d_in_features = 21
+d_out_features = 21
+d_inverse_transform = false
+
+# Model Information.
+d_model = "DLinear"
+d_model_input_type = "x_only"
+m_individual = 1 # Allows each feature to have its own Linear Layer.
+
+# -------------------------
+# GPU settings
+# -------------------------
+[gpu]
+
+
+
+# -------------------------
+# Datasets
+# -------------------------
+[[runs]]
+d_seq_len = 336
+d_pred_len = 48
+
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 512
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+
+
