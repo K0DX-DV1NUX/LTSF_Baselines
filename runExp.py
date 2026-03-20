@@ -40,8 +40,11 @@ for d_seed in range(2021, 2022):
 
         # -------------------------
         # Merged will allow to overide "default" settings, by settings in "runs".
-        # Ex: if default.d_batch_size=512, run.d_batch_size=32, then,
-        # merged.d_batch_size=32.
+        # Ex: if data_values.default.d_learning_rate=0.001, model.default.d_learning_rate=0.1, then,
+        # merged.d_learning_rate=0.1.
+        #
+        # Order of Priority follows:
+        # data_config[default] < model_config[default] < run
         # -------------------------
         merged = {
             **data_values['default'], 
