@@ -8,7 +8,8 @@ d_train_epochs = 100
 d_patience = 20
 d_learning_rate = 0.001
 d_batch_size = 512
-d_stride = 5
+d_train_stride = 5
+d_test_stride = 1
 d_lradj = "type7"
 d_num_workers = 0
 

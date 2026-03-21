@@ -94,17 +94,17 @@ class Exp_Main:
         flag_list = {
             "train": {"shuffle": True,
                     "drop_last": True, 
-                    "stride": self.args.d_stride, 
+                    "stride": self.args.d_train_stride, 
                     "batch_size": self.args.d_batch_size},
 
             "val": {"shuffle": False, 
                     "drop_last": False, 
-                    "stride": self.args.d_pred_len, 
+                    "stride": self.args.d_test_stride, 
                     "batch_size": self.args.d_batch_size},
 
             "test": {"shuffle": False, 
                      "drop_last": False, 
-                     "stride": self.args.d_pred_len,
+                     "stride": self.args.d_test_stride,
                      "batch_size": 1},
                 }
 
