@@ -349,37 +349,37 @@ class Model(nn.Module):
         super(Model, self).__init__()
         # hyper param
 
-        self.stem_ratio = configs.stem_ratio
-        self.downsample_ratio = configs.downsample_ratio
-        self.ffn_ratio = configs.ffn_ratio
-        self.num_blocks = configs.num_blocks
-        self.large_size = configs.large_size
-        self.small_size = configs.small_size
-        self.dims = configs.dims
-        self.dw_dims = configs.dw_dims
+        self.stem_ratio = configs.m_stem_ratio
+        self.downsample_ratio = configs.m_downsample_ratio
+        self.ffn_ratio = configs.m_ffn_ratio
+        self.num_blocks = configs.m_num_blocks
+        self.large_size = configs.m_large_size
+        self.small_size = configs.m_small_size
+        self.dims = configs.m_dims
+        self.dw_dims = configs.m_dw_dims
 
-        self.nvars = configs.enc_in
-        self.small_kernel_merged = configs.small_kernel_merged
-        self.drop_backbone = configs.dropout
-        self.drop_head = configs.head_dropout
-        self.use_multi_scale = configs.use_multi_scale
-        self.revin = configs.revin
-        self.affine = configs.affine
-        self.subtract_last = configs.subtract_last
+        self.nvars = configs.d_in_features
+        self.small_kernel_merged = configs.m_small_kernel_merged
+        self.drop_backbone = configs.m_dropout
+        self.drop_head = configs.m_head_dropout
+        self.use_multi_scale = configs.m_use_multi_scale
+        self.revin = configs.m_revin
+        self.affine = configs.m_affine
+        self.subtract_last = configs.m_subtract_last
 
-        self.freq = configs.freq
-        self.seq_len = configs.seq_len
-        self.c_in = self.nvars,
-        self.individual = configs.individual
-        self.target_window = configs.pred_len
+        self.freq = configs.d_freq
+        self.seq_len = configs.d_seq_len
+        self.c_in = self.nvars
+        self.individual = configs.m_individual
+        self.target_window = configs.d_pred_len
 
-        self.kernel_size = configs.kernel_size
-        self.patch_size = configs.patch_size
-        self.patch_stride = configs.patch_stride
+        self.kernel_size = configs.m_kernel_size
+        self.patch_size = configs.m_patch_size
+        self.patch_stride = configs.m_patch_stride
 
 
         # decomp
-        self.decomposition = configs.decomposition
+        self.decomposition = configs.m_decomposition
         if self.decomposition:
             self.decomp_module = series_decomp(self.kernel_size)
             self.model_res = ModernTCN(patch_size=self.patch_size,patch_stride=self.patch_stride,stem_ratio=self.stem_ratio, downsample_ratio=self.downsample_ratio, ffn_ratio=self.ffn_ratio, num_blocks=self.num_blocks, large_size=self.large_size, small_size=self.small_size, dims=self.dims, dw_dims=self.dw_dims,
