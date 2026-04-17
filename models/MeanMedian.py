@@ -19,6 +19,8 @@ class Model(nn.Module):
         self.channels = configs.d_in_features
         self.stat_type = getattr(configs, "m_stat_type", "mean").lower()
 
+        self.dummy_param = nn.Parameter(torch.zeros(1))
+
         if self.stat_type not in {"mean", "median"}:
             raise ValueError(
                 f"Unknown m_stat_type '{self.stat_type}'. "
@@ -39,4 +41,4 @@ class Model(nn.Module):
         else:
             forecast_value = x.median(dim=1, keepdim=True).values
 
-        return forecast_value.repeat(1, self.pred_len, 1)
+        return forecast_value.repeat(1, self.pred_len, 1) + (0.0 * self.dummy_param)
