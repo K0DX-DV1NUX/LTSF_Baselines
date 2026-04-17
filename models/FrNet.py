@@ -13,22 +13,38 @@ class Model(nn.Module):
     def __init__(self, configs):
         super(Model, self).__init__()
         self.configs = configs
-        self.seq_len = configs.seq_len
-        self.label_len = configs.label_len
-        self.pred_len = configs.pred_len
-        self.c_in = configs.enc_in
-        self.decomposition = configs.decomposition
-        kernel_size = configs.kernel_size
+        self.seq_len = configs.d_seq_len
+        self.label_len = configs.d_label_len
+        self.pred_len = configs.d_pred_len
+        self.c_in = configs.d_in_features
+        self.decomposition = configs.m_decomposition
+        kernel_size = configs.m_kernel_size
         self.decomp_module = series_decomp(kernel_size)
-        self.revin_layer = RevIN(configs.enc_in, affine=configs.affine, subtract_last=configs.subtract_last)
-        self.trend_revin_layer = RevIN(configs.enc_in, affine=configs.affine, subtract_last=configs.subtract_last)
-        self.period_list = configs.period_list
-        self.emb = configs.emb # is important for Transformer Attention
+        self.revin_layer = RevIN(self.c_in, affine=configs.m_affine, subtract_last=configs.m_subtract_last)
+        self.trend_revin_layer = RevIN(self.c_in, affine=configs.m_affine, subtract_last=configs.m_subtract_last)
+        self.period_list = configs.m_period_list
+        self.emb = configs.m_emb # is important for Transformer Attention
         
         # model
-        self.model = FRNet_backone(self.c_in, self.seq_len, self.pred_len, self.emb, configs.revin, configs.dropout, configs.e_layers, configs.pred_head_type, configs.aggregation_type, configs.channel_attention, configs.global_freq_pred, self.period_list)
+        self.model = FRNet_backone(
+            self.c_in, self.seq_len, self.pred_len, self.emb, configs.m_use_norm,
+            configs.m_dropout, configs.m_e_layers,
+            configs.m_pred_head_type,
+            configs.m_aggregation_type,
+            configs.m_channel_attention,
+            configs.m_global_freq_pred,
+            self.period_list
+        )
         if self.decomposition:
-            self.model_trend = FRNet_trend_backone(self.c_in, self.seq_len, self.pred_len, self.emb, configs.revin, configs.dropout, configs.e_layers, configs.pred_head_type, configs.aggregation_type, configs.channel_attention, configs.global_freq_pred, configs.patch_len, configs.stride)
+            self.model_trend = FRNet_trend_backone(
+                self.c_in, self.seq_len, self.pred_len, self.emb, configs.m_use_norm,
+                configs.m_dropout, configs.m_e_layers,
+                configs.m_pred_head_type,
+                configs.m_aggregation_type,
+                configs.m_channel_attention,
+                configs.m_global_freq_pred,
+                configs.m_patch_len, configs.m_stride
+            )
         self.linear_projection =  nn.Sequential(
             nn.ReLU(),
             nn.Linear(self.pred_len, self.pred_len)
