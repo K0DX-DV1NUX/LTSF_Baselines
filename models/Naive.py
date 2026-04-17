@@ -18,6 +18,7 @@ class Model(nn.Module):
         self.pred_len = configs.d_pred_len
         self.channels = configs.d_in_features
         self.naive_type = getattr(configs, "m_naive_type", "simple").lower()
+        self.dummy_param = nn.Parameter(torch.zeros(1))
 
         if self.naive_type not in {"simple", "ltsf"}:
             raise ValueError(
@@ -35,7 +36,8 @@ class Model(nn.Module):
             )
 
         if self.naive_type == "simple":
-            return x[:, -1:, :].repeat(1, self.pred_len, 1)
+            forecast = x[:, -1:, :].repeat(1, self.pred_len, 1)
+            return forecast + (0.0 * self.dummy_param)
 
         if self.pred_len > x.shape[1]:
             raise ValueError(
@@ -44,4 +46,5 @@ class Model(nn.Module):
                 f"input length={x.shape[1]}."
             )
 
-        return x[:, -self.pred_len:, :]
+        forecast = x[:, -self.pred_len:, :]
+        return forecast + (0.0 * self.dummy_param)
