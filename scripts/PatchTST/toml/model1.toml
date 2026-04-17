@@ -1,16 +1,15 @@
 [default]
-# Model
 d_model = "PatchTST"
 d_model_input_type = "x_only"
 
 # PatchTST params
 m_individual = 1
 m_e_layers = 3
-m_n_heads = 16
-m_d_model = 128
-m_d_ff = 256
-m_dropout = 0.2
-m_fc_dropout = 0.2
+m_n_heads = 4
+m_d_model = 16
+m_d_ff = 128
+m_dropout = 0.3
+m_fc_dropout = 0.3
 m_head_dropout = 0
 m_patch_len = 16
 m_stride = 8
@@ -24,9 +23,6 @@ m_padding_patch = "end"
 
 # -------------------------
 # Runs
-# -------------------------
-# -------------------------
-# Datasets
 # -------------------------
 [[runs]]
 d_seq_len = 336

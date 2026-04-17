@@ -1,5 +1,4 @@
 [default]
-# Model
 d_model = "PatchTST"
 d_model_input_type = "x_only"
 
@@ -24,9 +23,6 @@ m_padding_patch = "end"
 
 # -------------------------
 # Runs
-# -------------------------
-# -------------------------
-# Datasets
 # -------------------------
 [[runs]]
 d_seq_len = 336
