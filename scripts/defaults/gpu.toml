@@ -2,3 +2,5 @@
 # GPU settings
 # -------------------------
 [gpu]
+
+d_num_workers = 10

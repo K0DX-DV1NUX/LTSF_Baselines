@@ -65,9 +65,14 @@ class ExpConfig(BaseModel):
         description="Directory where model checkpoints will be saved."
     )
 
-    d_stride: int = Field(
+    d_train_stride: int = Field(
         5,
-        description="Stride used when generating sliding windows from time series data."
+        description="Stride used when generating sliding windows from training time series data."
+    )
+
+    d_test_stride: int = Field(
+        1,
+        description="Stride used when generating sliding windows from validating and testing time series data."
     )
 
     d_inverse_transform: bool = Field(

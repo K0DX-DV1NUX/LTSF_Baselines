@@ -10,7 +10,7 @@ d_learning_rate = 0.001
 d_batch_size = 32
 d_stride = 5
 d_lradj = "type7"
-d_num_workers = 0
+
 
 # Data
 d_root_path = "../dataset"

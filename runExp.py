@@ -35,7 +35,7 @@ model_values = load_toml(args.model_config)
 # Seed Values = 2021, 2022, 2023, 2024, 2025
 # 
 # -------------------------
-for d_seed in range(2021, 2022):
+for d_seed in range(2021, 2026):
     for run in model_values["runs"]:
 
         # -------------------------
