@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import math
 
 class moving_avg(nn.Module):
     """
@@ -51,6 +52,7 @@ class Model(nn.Module):
         self.individual = configs.m_individual
         self.channels = configs.d_in_features
 
+
         if self.individual:
             self.Linear_Seasonal = nn.ModuleList()
             self.Linear_Trend = nn.ModuleList()
@@ -73,7 +75,8 @@ class Model(nn.Module):
         # x: [Batch, Input length, Channel]
 
         if self.channels != x.shape[-1]:
-            raise ValueError("Model Configuration does not match the dataset.")
+            raise ValueError(f"Model Configuration does not match the dataset. Number of channels in the dataset: {x.shape[-1]}, number of channels expected by the model: {self.channels}")
+
 
         seasonal_init, trend_init = self.decompsition(x)
         seasonal_init, trend_init = seasonal_init.permute(0,2,1), trend_init.permute(0,2,1)
