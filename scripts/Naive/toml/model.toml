@@ -3,7 +3,7 @@
 d_model = "Naive"
 d_model_input_type = "x_only"
 m_naive_type = "simple"
-
+d_train_epochs = 1
 
 # -------------------------
 # Datasets
