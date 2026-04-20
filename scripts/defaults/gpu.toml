@@ -4,3 +4,4 @@
 [gpu]
 
 d_num_workers = 10
+d_use_gpu = true
