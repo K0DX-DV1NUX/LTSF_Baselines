@@ -57,28 +57,33 @@ class HaarWaveletDecomp:
 # -----------------------------
 # Harmonic Decomposition
 # -----------------------------
-class HarmonicDecomp(nn.Module):
-    def __init__(self, modes):
-        super(HarmonicDecomp, self).__init__()
-        self.modes = modes
+# class HarmonicDecomp(nn.Module):
+#     def __init__(self, modes):
+#         super(HarmonicDecomp, self).__init__()
+#         self.modes = modes
 
-    def forward(self, x):
-        x_fft = torch.fft.rfft(x, norm='ortho', dim=-1)
-        x_fft[:,:, self.modes:] = 0
-        x_mode = torch.fft.irfft(x_fft, norm='ortho', dim=-1, n=x.shape[-1])
-        return x_mode, x - x_mode
+#     def forward(self, x):
+#         x_fft = torch.fft.rfft(x, norm='ortho', dim=-1)
+#         x_fft[:,:, self.modes:] = 0
+#         x_mode = torch.fft.irfft(x_fft, norm='ortho', dim=-1, n=x.shape[-1])
+#         return x_mode, x - x_mode
 
 # -----------------------------
 # Patch Embedding
 # -----------------------------
 class PatchEmbedding(nn.Module):
-    def __init__(self, patch_size, patch_dim):
+    def __init__(self, patch_size, patch_dim, in_N, out_N):
         super(PatchEmbedding, self).__init__()
 
         self.patch_size = patch_size
         self.patch_dim = patch_dim
 
-        self.embed = nn.Linear(patch_size, patch_dim)
+        self.embed = PatchLinear(
+            in_patch_size=patch_size,
+            out_patch_size=patch_dim,
+            in_N=in_N,
+            out_N=out_N
+        )
 
 
     def forward(self, x):
@@ -88,9 +93,9 @@ class PatchEmbedding(nn.Module):
         '''
         # x: [B, C, L]
         batch, channels, length = x.shape
-        x = x.contiguous().view(batch, channels, -1, self.patch_size)  # [B, C, N, P]
+        #x = x.contiguous().view(batch, channels, -1, self.patch_size)  # [B, C, N, P]
         out = self.embed(x)  # [B, C, N, d_P
-        out = out.contiguous().view(batch, channels, -1)  # [B, C, N * d_P]
+        #out = out.contiguous().view(batch, channels, -1)  # [B, C, N * d_P]
 
         return out  # [B, c, N * d_P]
 
@@ -126,6 +131,12 @@ class ConvolutionalAttention(nn.Module):
             bias=False
         )
 
+        # self.qk_smoother = nn.AvgPool1d(
+        #     kernel_size=3,
+        #     stride=1,
+        #     padding=1
+        # )
+
         self.dropout = float(dropout)
 
     def forward(self, x):
@@ -139,6 +150,8 @@ class ConvolutionalAttention(nn.Module):
 
         x_conv = self.DWConv_qk(x) # [B, 2 * d_c, N * d_P]
         Q, K = x_conv[:, 0::2, :], x_conv[:, 1::2, :] # [B, d_c, N * d_P] each
+        # Q = self.qk_smoother(Q)
+        # K = self.qk_smoother(K)
 
         V = self.DWConv_v(x) # [B, d_c, N * d_P]
 
@@ -182,32 +195,16 @@ class MHCABlock(nn.Module):
             out_patch_size=patch_dim,
             in_N=N,
             out_N=N)
-        
-        #self.alpha = nn.Parameter(torch.ones(1, channel_dim, 1))  # Learnable scaling factor for attention output
-        #self.beta = nn.Parameter(torch.ones(1, channel_dim, 1))   # Learnable scaling factor for MLP output
     
     @torch.compile
     def forward(self, x):
         '''input x: [B, d_c, N * d_P]
            output: [B, d_c, N * d_P]
         '''
-        # Pre-norm before attention.
-        x = self.pre_norm1(x)
 
-        # Convolutional Attention.
-        out = self.attention(x)  # [B, d_c, N * d_P]
+        out = x + self.attention(self.pre_norm1(x))
 
-        # Residual connection.
-        out = x + out
-
-        # Pre-norm before MLP.
-        out = self.pre_norm2(out)
-
-        # MLP on the input sequence dimension.
-        out1 = self.mlp(out)
-        # out1 = F.gelu(out1)
-
-        out = out + out1
+        out = out + self.mlp(self.pre_norm2(out))
 
         return out
 
@@ -247,7 +244,9 @@ class Model(nn.Module):
 
         self.embed = PatchEmbedding(
             patch_size=self.patch_size,
-            patch_dim=self.patch_dim
+            patch_dim=self.patch_dim,
+            in_N=self.N_L,
+            out_N=self.N_L
         )
 
         self.mhca_blocks = nn.Sequential(*[
@@ -292,12 +291,8 @@ class Model(nn.Module):
 
         # Embedding
         embed= self.embed(x)  # [B, d_c, N * d_P]
-        
 
-        # Multi-Head Convolutional Attention Blocks
-        # for block in self.mhca_blocks:
-        #     embed = block(embed)  # [B, d_c, N * d_P]
-
+        # MHCA Blocks
         embed = self.mhca_blocks(embed)  # [B, d_c, N * d_P]
 
         approx_out, detail_out = torch.split(embed, c, dim=1)
@@ -327,10 +322,13 @@ class PatchLinear(nn.Module):
         output: [B, C, N * d_P]
         '''
         batch, channels, length = x.shape
+        
         x = x.contiguous().view(batch, channels, self.in_N, self.in_patch_size)
-        x = self.patch_proj(x)  # [B, C, N, out_P]
-        x = F.gelu(x)
-        x = x.permute(0, 1, 3, 2)
-        x = self.len_proj(x)  # [B, C, out_P, out_N]
+        
+        x = F.gelu(self.patch_proj(x))  # [B, C, N, out_P]
+        
+        x = self.len_proj(x.permute(0, 1, 3, 2))  # [B, C, out_P, out_N]
+
         out = x.contiguous().view(batch, channels, self.out_N * self.out_patch_size)  # [B, C, out_N * out_P]
+        
         return out
