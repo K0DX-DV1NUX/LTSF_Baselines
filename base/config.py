@@ -179,6 +179,11 @@ class ExpConfig(BaseModel):
         description="Loss function used for training."
     )
 
+    d_auxillary_loss: bool = Field(
+        False,
+        description="Whether to include auxiliary loss from model (if available) during training."
+    )
+
     d_lradj: str = Field(
         "type1",
         description="Learning rate adjustment strategy (scheduler type)."
@@ -216,6 +221,11 @@ class ExpConfig(BaseModel):
     d_use_amp: bool = Field(
         False,
         description="Enable automatic mixed precision (AMP) for faster training on supported GPUs."
+    )
+
+    d_plot_results: bool = Field(
+        False,
+        description="Enable plotting."
     )
 
     # --------------------------------

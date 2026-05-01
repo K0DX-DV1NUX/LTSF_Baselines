@@ -39,6 +39,7 @@ class Exp_Main:
             self.test_loader = self._get_data(flag='test')
 
         self.model = self._build_model().to(self.device)
+        
 
 
     def _acquire_device(self):
@@ -78,6 +79,7 @@ class Exp_Main:
             'ModernTCN': ModernTCN,
             'FrNet': FrNet,
             'ModelX': ModelX,
+            
         }
         
         model = model_dict[self.args.d_model].Model(self.args).float()
@@ -85,7 +87,7 @@ class Exp_Main:
         # If multiple GPUs are to be used and GPU is available, 
         # wrap the model with DataParallel for multi-GPU training.
         if self.args.d_use_multi_gpu and self.args.d_use_gpu:
-            model = nn.DataParallel(model, device_ids=self.args.device_ids)
+            model = nn.DataParallel(model, device_ids=self.args.d_devices)
         
         return model
 
@@ -192,7 +194,7 @@ class Exp_Main:
         return batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp
 
             
-    @torch.no_grad()
+    
     def vali(self, vali_loader, criterion):
         '''
         This method evaluates the model on the validation set. It iterates 
@@ -208,40 +210,42 @@ class Exp_Main:
         # Set the model to evaluation mode to disable dropout and batch normalization layers.
         self.model.eval()
         
-        
-        for _, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
-            
-            batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = self._get_inputs(batch_x, batch_y, batch_x_mark, batch_y_mark)
-
-            # Use automatic mixed precision for inference if enabled. 
-            # This can speed up inference on compatible hardware.
-            amp_context = torch.cuda.amp.autocast() if self.args.d_use_amp else nullcontext()
-
-            input_type = self.args.d_model_input_type.lower()
-
-            if input_type == "x_only":
-                model_args = (batch_x,)
-            elif input_type == "x_mark_incl":
-                model_args = (batch_x, batch_x_mark)
-            else:
-                model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
+        with torch.no_grad():
+            for _, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
                 
-            with amp_context:
-                outputs = self.model(*model_args)
-            
-            if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
-                outputs = outputs[0]
+                batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = self._get_inputs(batch_x, batch_y, batch_x_mark, batch_y_mark)
 
-            f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
-            outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
-            batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
+                # Use automatic mixed precision for inference if enabled. 
+                # This can speed up inference on compatible hardware.
+                amp_context = torch.cuda.amp.autocast() if self.args.d_use_amp else nullcontext()
 
-            pred = outputs.detach().cpu()
-            true = batch_y.detach().cpu()
-            loss = criterion(pred, true)
-            total_loss.append(loss)
+                input_type = self.args.d_model_input_type.lower()
+
+                if input_type == "x_only":
+                    model_args = (batch_x,)
+                elif input_type == "x_mark_incl":
+                    model_args = (batch_x, batch_x_mark)
+                else:
+                    model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    
+                with amp_context:
+                    outputs = self.model(*model_args)
+                
+                if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
+                    outputs = outputs[0]
+
+                f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
+                outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
+                batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
+
+                pred = outputs.detach().cpu()
+                true = batch_y.detach().cpu()
+                loss = criterion(pred, true)
+                total_loss.append(loss)
 
         total_loss = np.average(total_loss)
+
+        self.model.train()
 
         return total_loss
 
@@ -266,6 +270,10 @@ class Exp_Main:
         # data loader.
         train_steps = len(self.train_loader)
         early_stopping = EarlyStopping(patience=self.args.d_patience, verbose=True)
+
+        # Register lazily declared auxiliary-loss parameters before optimizer setup.
+        if self.args.d_auxillary_loss and hasattr(self.model, "_ensure_aux_loss_params"):
+            self.model._ensure_aux_loss_params()
 
         # Initialize the optimizer, criterion, and learning rate scheduler for training. 
         # The optimizer is selected using the _select_optimizer method, and 
@@ -329,7 +337,11 @@ class Exp_Main:
                 outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
-                loss = criterion(outputs, batch_y)
+                if self.args.d_auxillary_loss:
+                    loss = self.model.aux_loss(outputs, batch_y) if hasattr(self.model, 'aux_loss') else 0
+                else:
+                    loss = criterion(outputs, batch_y)
+
                 train_loss.append(loss.item())
 
                 # Print training progress every 100 iterations. It calculates the speed 
@@ -414,71 +426,40 @@ class Exp_Main:
 
         preds = []
         trues = []
-        #inputx = []
-
-        # Inputs for FlopCounts for fvncore
-        # profile_x = None
-        # profile_x_mark = None
-        # profile_y_mark = None
-        # profile_dec_inp = None
 
         self.model.eval()
-        #if self.args.d_call_structural_reparam and hasattr(self.model, 'structural_reparam'):
-        #    self.model.structural_reparam()
-        for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(self.test_loader):
-            batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = self._get_inputs(batch_x, batch_y, batch_x_mark, batch_y_mark)
+        with torch.no_grad():
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(self.test_loader):
+                batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = self._get_inputs(batch_x, batch_y, batch_x_mark, batch_y_mark)
 
-            # # Creating profiles for Fvncore
-            # if i==0:
-            #     profile_x = torch.randn(batch_x.shape).to(self.device)
-            #     profile_x_mark = torch.randn(batch_x_mark.shape).to(self.device)
-            #     profile_y_mark = torch.randn(batch_y_mark.shape).to(self.device)
-            #     profile_dec_inp = torch.randn(dec_inp.shape).to(self.device)
+                input_type = self.args.d_model_input_type.lower()
 
-            input_type = self.args.d_model_input_type.lower()
+                if input_type == "x_only":
+                    model_args = (batch_x,)
+                elif input_type == "x_mark_incl":
+                    model_args = (batch_x, batch_x_mark)
+                else:
+                    model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                
+                outputs = self.model(*model_args)
 
-            if input_type == "x_only":
-                model_args = (batch_x,)
-            elif input_type == "x_mark_incl":
-                model_args = (batch_x, batch_x_mark)
-            else:
-                model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
-            
-            outputs = self.model(*model_args)
-
-            if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
-                outputs = outputs[0]
+                if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
+                    outputs = outputs[0]
 
 
-            f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
-            outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
-            batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
+                f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
+                outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
+                batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
-            outputs = outputs.detach().cpu().numpy()
-            batch_y = batch_y.detach().cpu().numpy()
+                outputs = outputs.detach().cpu().numpy()
+                batch_y = batch_y.detach().cpu().numpy()
 
-            # if self.args.d_inverse:
-            #     shape = outputs.shape
-            #     outputs = test_data.inverse_transform(outputs.squeeze(0)).reshape(shape)
-            #     batch_y = test_data.inverse_transform(batch_y.squeeze(0)).reshape(shape)
-            pred = outputs
-            true = batch_y
+                pred = outputs
+                true = batch_y
 
             preds.append(pred)
             trues.append(true)
-            #inputx.append(batch_x.detach().cpu().numpy())
-
-            # # If Plotting Results is enabled: 0=False, 1=True
-            # if self.args.plot_results:
-            #     if i % 20 == 0:
-            #         input = batch_x.detach().cpu().numpy()
-            #         # if test_data.scale and self.args.inverse:
-            #         #     shape = input.shape
-            #         #     input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
-            #         gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-            #         pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-            #         visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
-
+            
         preds = np.concatenate(preds, axis=0)
         trues = np.concatenate(trues, axis=0)
 
