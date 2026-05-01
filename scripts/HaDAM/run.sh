@@ -1,6 +1,6 @@
 #!/bin/sh
 
-model_config="scripts/ModelX/toml/model.toml"
+model_config="scripts/HaDAM/toml/model.toml"
 data_config="scripts/defaults/"
 gpu_config="scripts/defaults/gpu.toml"
 
