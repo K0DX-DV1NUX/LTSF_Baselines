@@ -129,7 +129,7 @@ class ConvolutionalAttention(nn.Module):
         V = self.DWConv_v(x) # [b, c, l]
 
         out = F.scaled_dot_product_attention(
-            Q, K, V, dropout_p=self.dropout
+            Q, K, V, dropout_p=self.dropout if self.training else 0.0
         ) # [b, c, l]
 
         return out # [b, c, l]
