@@ -457,8 +457,8 @@ class Exp_Main:
                 pred = outputs
                 true = batch_y
 
-            preds.append(pred)
-            trues.append(true)
+                preds.append(pred)
+                trues.append(true)
             
         preds = np.concatenate(preds, axis=0)
         trues = np.concatenate(trues, axis=0)
