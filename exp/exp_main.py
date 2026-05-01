@@ -14,7 +14,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import DLinear, MeanMedian, ModernTCN, Naive, PatchTST, SparseTSF, iTransformer, FrNet, ModelX
+from models import DLinear, HaDAM, MeanMedian, ModernTCN, Naive, PatchTST, SparseTSF, iTransformer, FrNet
 from utils.learning_rates import adjust_learning_rate
 from utils.tools import EarlyStopping
 from utils.metrics import metric
@@ -78,7 +78,7 @@ class Exp_Main:
             'iTransformer': iTransformer,
             'ModernTCN': ModernTCN,
             'FrNet': FrNet,
-            'ModelX': ModelX,
+            'HaDAM': HaDAM,
             
         }
         

@@ -9,7 +9,7 @@ import torch
 from fvcore.nn import FlopCountAnalysis
 
 from base.config import ExpConfig
-from models import DLinear, FrNet, MeanMedian, ModelX, ModernTCN, Naive, PatchTST, SparseTSF, iTransformer
+from models import DLinear, FrNet, HaDAM, MeanMedian, ModernTCN, Naive, PatchTST, SparseTSF, iTransformer
 
 
 MODEL_DICT = {
@@ -21,7 +21,7 @@ MODEL_DICT = {
     "iTransformer": iTransformer,
     "ModernTCN": ModernTCN,
     "FrNet": FrNet,
-    "ModelX": ModelX,
+    "ModelX": HaDAM,
 }
 
 
