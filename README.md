@@ -1,4 +1,4 @@
-# BASELINES
+# Long Term Time Series Forecasting Baseline Testing
 
 This repository contains a configurable long-term time-series forecasting
 benchmark runner. It trains and evaluates baseline forecasting models across
