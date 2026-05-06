@@ -65,10 +65,8 @@ def main():
 
             # If using multiple GPUs, set up the device ids and the primary gpu.
             if cfgs.d_use_gpu and cfgs.d_use_multi_gpu:
-                cfgs.d_devices = cfgs.devices.replace(' ', '')
-                device_ids = cfgs.d_devices.split(',')
-                cfgs.d_device_ids = [int(id_) for id_ in device_ids]
-                cfgs.d_gpu = cfgs.device_ids[0]
+                cfgs.d_devices = [int(device_id) for device_id in cfgs.d_devices]
+                cfgs.d_gpu = cfgs.d_devices[0]
 
             # --------------------------------
             # Print the arguments for the experiment. 

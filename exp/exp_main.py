@@ -50,8 +50,12 @@ class Exp_Main:
         GPUs. If GPU is not available, it sets the device to CPU.
         '''
         if self.args.d_use_gpu:
-            os.environ["CUDA_VISIBLE_DEVICES"] = str(
-                self.args.d_gpu) if not self.args.d_use_multi_gpu else self.args.d_devices
+            visible_devices = (
+                str(self.args.d_gpu)
+                if not self.args.d_use_multi_gpu
+                else ",".join(str(device_id) for device_id in self.args.d_devices)
+            )
+            os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices
             device = torch.device('cuda:{}'.format(self.args.d_gpu))
             print('Use GPU: cuda:{}'.format(self.args.d_gpu))
         else:

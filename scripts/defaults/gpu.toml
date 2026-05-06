@@ -5,4 +5,4 @@
 
 d_num_workers = 10
 d_use_gpu = true
-d_gpu_id = 0
+d_gpu = 0
